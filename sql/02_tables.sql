@@ -458,7 +458,6 @@ CREATE TABLE goods_receipt (
 -- 23. GOODS_RECEIPT_DETAIL
 -- =========================================================
 CREATE TABLE goods_receipt_detail (
-    goods_receipt_detail_id   VARCHAR2(10) NOT NULL,
     goods_receipt_id          VARCHAR2(10) NOT NULL,
     product_id                VARCHAR2(10) NOT NULL,
     quantity                  NUMBER(12,2) NOT NULL,
@@ -468,7 +467,6 @@ CREATE TABLE goods_receipt_detail (
     created_at                TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     updated_at                TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
 
-    CONSTRAINT pk_goods_receipt_detail PRIMARY KEY (goods_receipt_detail_id),
     CONSTRAINT fk_grd_receipt FOREIGN KEY (goods_receipt_id) REFERENCES goods_receipt(goods_receipt_id),
     CONSTRAINT fk_grd_product FOREIGN KEY (product_id) REFERENCES product(product_id),
     CONSTRAINT uq_grd_receipt_product UNIQUE (goods_receipt_id, product_id),
@@ -498,7 +496,6 @@ CREATE TABLE stock_audit (
 -- 25. STOCK_AUDIT_DETAIL
 -- =========================================================
 CREATE TABLE stock_audit_detail (
-    stock_audit_detail_id   VARCHAR2(10) NOT NULL,
     stock_audit_id          VARCHAR2(10) NOT NULL,
     product_id              VARCHAR2(10) NOT NULL,
     system_quantity         NUMBER(12,2) DEFAULT 0 NOT NULL,

@@ -1,75 +1,79 @@
 -- =========================================================
--- MENU
+-- FILE: 05_procedures.sql
+-- MỤC ĐÍCH: Tập hợp các Stored Procedure xử lý các quy trình nghiệp vụ phức tạp,
+-- tính toán số liệu và cập nhật nhiều bảng cùng lúc cho hệ thống Pet Hotel and Spa.
+--
+-- DANH SÁCH CÁC PROCEDURE:
+-- 01. room_for_multiple_pets         : Kiểm tra logic khi muốn gửi cùng lúc nhiều thú cưng vào một phòng.
+-- 02. sp_validate_and_execute_stock  : Khấu trừ tồn kho vật tư tiêu hao dựa trên định mức cân nặng.
+-- 03. sp_refund_service_stock        : Hoàn trả vật tư vào kho chi nhánh khi một dịch vụ bị hủy bỏ.
+-- 04. sp_assign_pet_to_room          : Thực hiện gán thú cưng vào phòng, kiểm tra sức chứa tối đa (max_pets).
+-- 05. update_orders_status           : Đối chiếu tổng tiền thanh toán để tự động cập nhật trạng thái hóa đơn.
+-- 06. sp_checkin_booking             : Thực hiện check-in booking, chuyển trạng thái phòng sang IN_USE.
+-- 07. sp_checkout_booking            : Thực hiện checkout booking, trả phòng về AVAILABLE.
+-- 08. sp_insert_room_charges         : Tự động tính tiền phòng và chèn vào hóa đơn
 -- =========================================================
 
--- II. PROCEDURE
---   1. room_for_multiple_pets                  -- Thủ tục kiểm tra khả năng xếp nhiều thú cưng vào cùng một phòng trống
---   2. sp_validate_and_execute_stock           -- Thủ tục kiểm tra tồn kho và thực hiện trừ kho vật tư tiêu hao
---   3. sp_refund_service_stock                 -- Thủ tục hoàn trả vật tư vào kho khi dịch vụ bị hủy
---   4. sp_assign_pet_to_room                   -- Thủ tục gán thú cưng vào một phòng cụ thể
---   5. update_orders_status                    -- Thủ tục cập nhật trạng thái hóa đơn theo số tiền đã thanh toán
---   6. sp_create_order_from_booking            -- Thủ tục tạo hóa đơn từ booking
---   7. sp_add_payment                          -- Thủ tục ghi nhận thanh toán cho hóa đơn
---   8. sp_update_booking_service_status        -- Thủ tục cập nhật trạng thái dịch vụ đặt thêm
---   9. sp_check_in_booking                     -- Thủ tục check-in booking lưu trú
---  10. sp_check_out_booking                    -- Thủ tục check-out booking lưu trú
-
 -- =========================================================
--- II. PROCEDURE
+-- PROC-01: Kiểm tra điều kiện gán nhiều thú cưng vào một phòng
+-- Bảng liên quan: type_room, room, booking_room, booking_room_pet
+-- Input:  p_booking_room_id (ID phòng đặt), p_pet_count (Số lượng thú cưng),
+--         p_max_pet_weight (Khối lượng lớn nhất trong nhóm)
+-- Mục đích:
+--   Kiểm tra tính hợp lệ khi một khách hàng muốn gửi nhiều thú cưng vào cùng 1 phòng.
+--   Điều kiện:
+--   1. Phòng phải đang trống (chưa có thú cưng nào).
+--   2. Số lượng thú cưng không vượt sức chứa tối đa (max_pets).
+--   3. Không có thú cưng nào vượt quá giới hạn tải trọng (max_weight_kg) của phòng.
 -- =========================================================
-
--- 1. Kiểm tra khi một khách hàng muốn gửi nhiều thú cưng vào cùng một phòng trống
 CREATE OR REPLACE PROCEDURE room_for_multiple_pets (
-    p_booking_room_id IN booking_room.booking_room_id%TYPE,
+    p_booking_room_id IN VARCHAR2,
     p_pet_count       IN NUMBER,
     p_max_pet_weight  IN NUMBER
 )
 AS
-    v_max_pets        type_room.max_pets%TYPE;
-    v_max_weight_kg   type_room.max_weight_kg%TYPE;
-    v_existing_count  NUMBER;
+    v_max_pets       type_room.max_pets%TYPE;
+    v_max_weight_kg  type_room.max_weight_kg%TYPE;
+    v_existing_count NUMBER;
 BEGIN
+    -- 1. Lấy thông tin sức chứa và tải trọng của loại phòng
     SELECT tr.max_pets, tr.max_weight_kg
-    INTO v_max_pets, v_max_weight_kg
-    FROM type_room tr
-    JOIN room r
-        ON r.type_room_id = tr.type_room_id
-    JOIN booking_room br
-        ON br.room_id = r.room_id
-    WHERE br.booking_room_id = p_booking_room_id;
+    INTO   v_max_pets, v_max_weight_kg
+    FROM   type_room     tr
+    JOIN   room          r  ON r.type_room_id  = tr.type_room_id
+    JOIN   booking_room  br ON br.room_id      = r.room_id
+    WHERE  br.booking_room_id = p_booking_room_id;
 
+    -- 2. Đếm số thú cưng hiện đang ở trong phòng
     SELECT COUNT(*)
-    INTO v_existing_count
-    FROM booking_room_pet brp
-    WHERE brp.booking_room_id = p_booking_room_id;
+    INTO   v_existing_count
+    FROM   booking_room_pet brp
+    WHERE  brp.booking_room_id = p_booking_room_id;
 
+    -- 3. Phòng phải trống hoàn toàn trước khi gán cùng lúc nhiều thú cưng
     IF v_existing_count > 0 THEN
         RAISE_APPLICATION_ERROR(
             -20051,
-            'Room is not empty. This procedure only applies to empty rooms.'
-        );
+            'LỖI PHÒNG TRỐNG: Phòng đang có thú cưng khác. Thủ tục này chỉ áp dụng cho phòng trống hoàn toàn.');
     END IF;
 
-    IF p_pet_count IS NULL OR p_pet_count <= 0 THEN
-        RAISE_APPLICATION_ERROR(
-            -20052,
-            'Pet count must be greater than zero.'
-        );
-    END IF;
-
+    -- 4. Kiểm tra số lượng không vượt sức chứa
     IF p_pet_count > v_max_pets THEN
         RAISE_APPLICATION_ERROR(
             -20053,
-            'The number of pets exceeds the room capacity. Max pets allowed = ' || v_max_pets
+            'LỖI SỨC CHỨA: Số lượng thú cưng (' || p_pet_count ||
+            ') vượt quá sức chứa tối đa của phòng (' || v_max_pets || ' bé).'
         );
     END IF;
 
+    -- 5. Kiểm tra tải trọng thú cưng nặng nhất trong nhóm
     IF v_max_weight_kg IS NOT NULL
        AND p_max_pet_weight IS NOT NULL
        AND p_max_pet_weight > v_max_weight_kg THEN
         RAISE_APPLICATION_ERROR(
             -20055,
-            'One or more pets exceed the room weight limit. Max weight allowed = ' || v_max_weight_kg || ' kg'
+            'LỖI TẢI TRỌNG: Có thú cưng vượt giới hạn cân nặng của phòng. ' ||
+            'Tải trọng tối đa = ' || v_max_weight_kg || ' kg.'
         );
     END IF;
 
@@ -77,18 +81,27 @@ EXCEPTION
     WHEN NO_DATA_FOUND THEN
         RAISE_APPLICATION_ERROR(
             -20056,
-            'Booking room does not exist.'
+            'LỖI DỮ LIỆU: Không tìm thấy thông tin phòng tương ứng với booking_room_id = ' ||
+            p_booking_room_id || '.'
         );
-END;
+END room_for_multiple_pets;
 /
 
--- 2. Kiểm tra tồn kho và thực hiện trừ kho vật tư tiêu hao
+-- =========================================================
+-- PROC-02: Xác thực và trừ tồn kho vật tư
+-- Bảng liên quan: booking, pet, services, service_product_standard, branch_inventory
+-- Input: p_booking_id, p_service_id, p_pet_id
+-- Mục đích:
+--   - So khớp Loài (Species) giữa thú cưng và dịch vụ để chống đặt nhầm.
+--   - Dựa vào cân nặng thú cưng, tra cứu định mức sử dụng vật tư tương ứng.
+--   - Sử dụng FOR UPDATE để khóa dòng tồn kho, ngăn chặn tranh chấp dữ liệu (Race Condition).
+--   - Trừ kho vật tư nếu số lượng đáp ứng đủ.
+-- =========================================================
 CREATE OR REPLACE PROCEDURE sp_validate_and_execute_stock (
     p_booking_id IN booking.booking_id%TYPE,
     p_service_id IN services.service_id%TYPE,
     p_pet_id     IN pet.pet_id%TYPE
-)
-IS
+) IS
     v_branch_id        booking.branch_id%TYPE;
     v_weight_kg        pet.weight_kg%TYPE;
     v_pet_species      pet.species%TYPE;
@@ -96,627 +109,492 @@ IS
     v_stock            NUMBER;
     v_usage_conv       NUMBER;
 BEGIN
+    -- 1. Lấy chi nhánh thực hiện
     SELECT b.branch_id
-    INTO v_branch_id
-    FROM booking b
-    WHERE b.booking_id = p_booking_id;
+    INTO   v_branch_id
+    FROM   booking b
+    WHERE  b.booking_id = p_booking_id;
 
+    -- 2. Lấy cân nặng và loài của thú cưng
     SELECT p.weight_kg, UPPER(p.species)
-    INTO v_weight_kg, v_pet_species
-    FROM pet p
-    WHERE p.pet_id = p_pet_id;
+    INTO   v_weight_kg, v_pet_species
+    FROM   pet p
+    WHERE  p.pet_id = p_pet_id;
 
+    -- 3. Lấy loài được quy định cho dịch vụ này
     SELECT UPPER(s.species)
-    INTO v_service_species
-    FROM services s
-    WHERE s.service_id = p_service_id;
+    INTO   v_service_species
+    FROM   services s
+    WHERE  s.service_id = p_service_id;
 
-    IF v_pet_species <> v_service_species THEN
+    -- 4. Kiểm tra chéo loài để đảm bảo dịch vụ phù hợp
+    IF v_service_species IS NOT NULL AND v_pet_species != v_service_species THEN
         RAISE_APPLICATION_ERROR(
             -20033,
-            'This service is not applicable to species: ' || v_pet_species
+            'LỖI LOÀI: Dịch vụ này không dành cho loài ' || v_pet_species ||
+            '. Dịch vụ yêu cầu loài: ' || v_service_species || '.'
         );
     END IF;
 
+    -- 5. Duyệt định mức vật tư tiêu hao theo cân nặng thú cưng
     FOR rec IN (
-        SELECT sps.product_id,
-               sps.usage_amount,
-               sps.usage_unit
-        FROM service_product_standard sps
-        WHERE sps.service_id = p_service_id
-          AND UPPER(sps.species) = v_pet_species
-          AND v_weight_kg >= sps.min_weight_kg
-          AND v_weight_kg <= sps.max_weight_kg
+        SELECT sps.product_id, sps.usage_amount, sps.usage_unit
+        FROM   service_product_standard sps
+        WHERE  sps.service_id   = p_service_id
+          AND  v_weight_kg      >  sps.min_weight_kg
+          AND  v_weight_kg      <= sps.max_weight_kg
     ) LOOP
+
+        -- 5.1 Quy đổi đơn vị tiêu hao về ML / G
         v_usage_conv := fn_convert_unit(rec.usage_amount, rec.usage_unit);
 
+        -- 5.2 Khóa dòng tồn kho để đảm bảo tính tuần tự giao dịch
         BEGIN
             SELECT bi.quantity_in_stock
-            INTO v_stock
-            FROM branch_inventory bi
-            WHERE bi.product_id = rec.product_id
-              AND bi.branch_id = v_branch_id
-            FOR UPDATE;
+            INTO   v_stock
+            FROM   branch_inventory bi
+            WHERE  bi.product_id = rec.product_id
+              AND  bi.branch_id  = v_branch_id
+            FOR UPDATE;                 -- KHÓA DÒNG
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 v_stock := 0;
         END;
 
+        -- 5.3 Kiểm tra tồn kho đủ dùng
         IF v_stock < v_usage_conv THEN
             RAISE_APPLICATION_ERROR(
                 -20030,
-                'Insufficient stock for product_id = ' || rec.product_id ||
-                '. Required = ' || v_usage_conv || ', Available = ' || v_stock
+                'LỖI TỒN KHO: Sản phẩm ' || rec.product_id ||
+                ' không đủ. Cần: ' || v_usage_conv || ', Còn: ' || v_stock || '.'
             );
         END IF;
 
+        -- 5.4 Trừ kho
         UPDATE branch_inventory bi
-        SET bi.quantity_in_stock = bi.quantity_in_stock - v_usage_conv,
-            bi.last_updated      = SYSTIMESTAMP
-        WHERE bi.branch_id = v_branch_id
-          AND bi.product_id = rec.product_id;
-    END LOOP;
+        SET    bi.quantity_in_stock = bi.quantity_in_stock - v_usage_conv,
+               bi.last_updated      = SYSTIMESTAMP
+        WHERE  bi.branch_id  = v_branch_id
+          AND  bi.product_id = rec.product_id;
 
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20031,
-            'Invalid booking, service, or pet information.'
-        );
-END;
+    END LOOP;
+END sp_validate_and_execute_stock;
 /
 
--- 3. Hoàn trả vật tư vào kho khi dịch vụ bị hủy
+-- =========================================================
+-- PROC-03: Hoàn trả tồn kho khi dịch vụ bị hủy
+-- Bảng liên quan: booking, pet, service_product_standard, branch_inventory
+-- Input: p_booking_id, p_service_id, p_pet_id
+-- Mục đích:
+--   Khi dịch vụ chuyển sang trạng thái CANCELLED, procedure này sẽ tra cứu lại định mức
+--   và cộng trả lại số lượng vật tư vào kho của chi nhánh. Sử dụng FOR UPDATE để tránh
+--   việc cộng dồn sai lệch khi có nhiều tiến trình chạy song song.
+-- =========================================================
 CREATE OR REPLACE PROCEDURE sp_refund_service_stock (
     p_booking_id IN booking.booking_id%TYPE,
     p_service_id IN services.service_id%TYPE,
     p_pet_id     IN pet.pet_id%TYPE
-)
-IS
-    v_branch_id    booking.branch_id%TYPE;
-    v_weight_kg    pet.weight_kg%TYPE;
-    v_pet_species  pet.species%TYPE;
-    v_usage_conv   NUMBER;
-    v_dummy_stock  NUMBER;
+) IS
+    v_branch_id   booking.branch_id%TYPE;
+    v_weight_kg   pet.weight_kg%TYPE;
+    v_usage_conv  NUMBER;
+    v_dummy_stock NUMBER;
 BEGIN
+    -- 1. Lấy chi nhánh thực hiện dịch vụ
     SELECT b.branch_id
-    INTO v_branch_id
-    FROM booking b
-    WHERE b.booking_id = p_booking_id;
+    INTO   v_branch_id
+    FROM   booking b
+    WHERE  b.booking_id = p_booking_id;
 
-    SELECT p.weight_kg, UPPER(p.species)
-    INTO v_weight_kg, v_pet_species
-    FROM pet p
-    WHERE p.pet_id = p_pet_id;
+    -- 2. Lấy cân nặng thú cưng để tra định mức hoàn trả
+    SELECT p.weight_kg
+    INTO   v_weight_kg
+    FROM   pet p
+    WHERE  p.pet_id = p_pet_id;
 
+    -- 3. Duyệt định mức và hoàn kho
     FOR rec IN (
-        SELECT sps.product_id,
-               sps.usage_amount,
-               sps.usage_unit
-        FROM service_product_standard sps
-        WHERE sps.service_id = p_service_id
-          AND UPPER(sps.species) = v_pet_species
-          AND v_weight_kg >= sps.min_weight_kg
-          AND v_weight_kg <= sps.max_weight_kg
+        SELECT sps.product_id, sps.usage_amount, sps.usage_unit
+        FROM   service_product_standard sps
+        WHERE  sps.service_id = p_service_id
+          AND  v_weight_kg    >  sps.min_weight_kg
+          AND  v_weight_kg    <= sps.max_weight_kg
     ) LOOP
+
         v_usage_conv := fn_convert_unit(rec.usage_amount, rec.usage_unit);
 
+        -- Khóa dòng tồn kho trước khi cộng trả để tránh race condition
         BEGIN
             SELECT bi.quantity_in_stock
-            INTO v_dummy_stock
-            FROM branch_inventory bi
-            WHERE bi.product_id = rec.product_id
-              AND bi.branch_id = v_branch_id
-            FOR UPDATE;
+            INTO   v_dummy_stock
+            FROM   branch_inventory bi
+            WHERE  bi.product_id = rec.product_id
+              AND  bi.branch_id  = v_branch_id
+            FOR UPDATE;             -- KHÓA DÒNG
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
-                INSERT INTO branch_inventory (
-                    branch_id,
-                    product_id,
-                    quantity_in_stock,
-                    reorder_point,
-                    last_updated
-                )
-                VALUES (
-                    v_branch_id,
-                    rec.product_id,
-                    0,
-                    0,
-                    SYSTIMESTAMP
-                );
+                CONTINUE;           -- Vật tư không có bản ghi tồn kho → bỏ qua
         END;
 
+        -- Cộng trả lại số lượng đã tiêu hao
         UPDATE branch_inventory bi
-        SET bi.quantity_in_stock = bi.quantity_in_stock + v_usage_conv,
-            bi.last_updated      = SYSTIMESTAMP
-        WHERE bi.branch_id = v_branch_id
-          AND bi.product_id = rec.product_id;
-    END LOOP;
+        SET    bi.quantity_in_stock = bi.quantity_in_stock + v_usage_conv,
+               bi.last_updated      = SYSTIMESTAMP
+        WHERE  bi.branch_id  = v_branch_id
+          AND  bi.product_id = rec.product_id;
 
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20032,
-            'Invalid booking or pet information.'
-        );
-END;
+    END LOOP;
+END sp_refund_service_stock;
 /
 
--- 4. Gán thú cưng vào một phòng cụ thể
+-- =========================================================
+-- PROC-04: Thêm thú cưng vào phòng
+-- Bảng liên quan: booking_room_pet, booking_room, room, type_room
+-- Input: p_booking_room_id, p_pet_id
+-- Mục đích:
+--   Thủ tục thực hiện gán thú cưng vào một phòng cụ thể thông qua lệnh INSERT.
+--   Trước đó, thủ tục sẽ đếm số lượng hiện tại và so sánh với sức chứa tối đa (max_pets).
+--   Lưu ý: Lệnh INSERT thành công sẽ tự động kích hoạt các Trigger kiểm tra cân nặng,
+--   chủ sở hữu và cập nhật trạng thái phòng sang IN_USE.
+-- =========================================================
 CREATE OR REPLACE PROCEDURE sp_assign_pet_to_room (
     p_booking_room_id IN booking_room.booking_room_id%TYPE,
     p_pet_id          IN pet.pet_id%TYPE
-)
-IS
+) IS
     v_current_pets NUMBER;
     v_max_pets     type_room.max_pets%TYPE;
 BEGIN
+    -- 1. Đếm số lượng thú cưng hiện tại đang có trong phòng này
     SELECT COUNT(*)
-    INTO v_current_pets
-    FROM booking_room_pet brp
-    WHERE brp.booking_room_id = p_booking_room_id;
+    INTO   v_current_pets
+    FROM   booking_room_pet brp
+    WHERE  brp.booking_room_id = p_booking_room_id;
 
+    -- 2. Lấy sức chứa tối đa (max_pets) của loại phòng
     SELECT tr.max_pets
-    INTO v_max_pets
-    FROM booking_room br
-    JOIN room r
-        ON br.room_id = r.room_id
-    JOIN type_room tr
-        ON r.type_room_id = tr.type_room_id
-    WHERE br.booking_room_id = p_booking_room_id;
+    INTO   v_max_pets
+    FROM   booking_room br
+    JOIN   room         r  ON r.room_id       = br.room_id
+    JOIN   type_room    tr ON tr.type_room_id  = r.type_room_id
+    WHERE  br.booking_room_id = p_booking_room_id;
 
+    -- 3. Kiểm tra sức chứa trước khi thêm
     IF v_current_pets >= v_max_pets THEN
         RAISE_APPLICATION_ERROR(
             -20041,
-            'Room capacity has been reached. Max pets allowed = ' || v_max_pets
+            'LỖI SỨC CHỨA: Phòng đã đạt số lượng thú cưng tối đa (' ||
+            v_max_pets || ' bé). Không thể thêm thú cưng mới.'
         );
     END IF;
 
-    INSERT INTO booking_room_pet (
-        booking_room_id,
-        pet_id,
-        assigned_at
-    )
-    VALUES (
-        p_booking_room_id,
-        p_pet_id,
-        SYSTIMESTAMP
+    -- 4. Gán thú cưng vào phòng (INSERT kích hoạt TRG-05, TRG-07, TRG-11)
+    INSERT INTO booking_room_pet (booking_room_id, pet_id)
+    VALUES (p_booking_room_id, p_pet_id);
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(
+            -20042,
+            'LỖI DỮ LIỆU: Không tìm thấy thông tin phòng với booking_room_id = ' ||
+            p_booking_room_id || '.'
+        );
+END sp_assign_pet_to_room;
+/
+
+-- =========================================================
+-- PROC-05: Cập nhật trạng thái hóa đơn dựa trên giao dịch thanh toán
+-- Bảng liên quan: orders, payments
+-- Input: v_order_id
+-- Mục đích:
+--   Sử dụng Cursor để tính tổng tất cả các khoản thanh toán thành công ('SUCCESS')
+--   của một hóa đơn. Sau đó đối chiếu với tổng tiền (grand_total):
+--   - Nếu tổng thanh toán > hóa đơn: Báo lỗi vượt quá số tiền cần trả.
+--   - Nếu tổng thanh toán = hóa đơn: Cập nhật hóa đơn thành 'PAID'
+--     (yêu cầu dịch vụ/phòng đã xong qua hàm fn_is_order_ready_to_pay).
+--   - Nếu tổng thanh toán < hóa đơn: Cập nhật hóa đơn thành 'PARTIAL'.
+-- =========================================================
+CREATE OR REPLACE PROCEDURE update_orders_status (
+    v_order_id IN orders.order_id%TYPE
+) IS
+    -- Cursor trả về tổng tiền đã thanh toán thành công của hóa đơn
+    CURSOR cursor_orders IS
+        SELECT NVL(SUM(p.amount), 0)
+        FROM   payments p
+        WHERE  p.order_id = v_order_id
+          AND  p.status   = 'SUCCESS';
+
+    v_total_paid  orders.grand_total%TYPE;
+    v_grand_total orders.grand_total%TYPE;
+BEGIN
+    -- 1. Lấy tổng tiền cần thanh toán của hóa đơn
+    SELECT ord.grand_total
+    INTO   v_grand_total
+    FROM   orders ord
+    WHERE  ord.order_id = v_order_id;
+
+    -- 2. Duyệt Cursor tính tổng tiền đã đóng
+    OPEN cursor_orders;
+    FETCH cursor_orders INTO v_total_paid;
+    CLOSE cursor_orders;
+
+    -- NVL phòng trường hợp chưa có khoản nào → coi như 0
+    v_total_paid := NVL(v_total_paid, 0);
+
+    -- 3. Ràng buộc chống đóng dư tiền
+    IF v_total_paid > v_grand_total THEN
+        RAISE_APPLICATION_ERROR(
+            -20001,
+            'LỖI THANH TOÁN: Tổng tiền đã thu (' || v_total_paid ||
+            ') vượt quá giá trị hóa đơn (' || v_grand_total || ').'
+        );
+    END IF;
+
+    -- 4. Cập nhật trạng thái hóa đơn theo số tiền đã thu
+    --    Điều kiện PAID bắt buộc dịch vụ/phòng phải hoàn thành
+    UPDATE orders
+    SET    status = CASE
+                       WHEN v_total_paid = v_grand_total
+                            AND fn_is_order_ready_to_pay(v_order_id) THEN 'PAID'
+                       WHEN v_total_paid < v_grand_total              THEN 'PARTIAL'
+                       ELSE status   -- Không đủ điều kiện PAID → giữ nguyên trạng thái hiện tại
+                   END
+    WHERE  order_id = v_order_id;
+
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        -- Nếu Cursor chưa đóng, đóng lại trước khi raise
+        IF cursor_orders%ISOPEN THEN
+            CLOSE cursor_orders;
+        END IF;
+        RAISE_APPLICATION_ERROR(
+            -20002,
+            'LỖI DỮ LIỆU: Không tìm thấy hóa đơn với order_id = ' || v_order_id || '.'
+        );
+END update_orders_status;
+/
+
+-- =========================================================
+-- PROC-06: [MỚI] Thực hiện Check-in booking
+-- Bảng liên quan: booking, booking_room, room
+-- Input: p_booking_id (Mã booking cần check-in)
+-- Mục đích:
+--   Thực hiện toàn bộ quy trình check-in một cách an toàn:
+--   1. Kiểm tra booking ở trạng thái CONFIRMED mới cho phép check-in.
+--   2. Kiểm tra tất cả phòng liên kết đang ở trạng thái AVAILABLE.
+--   3. Chuyển trạng thái booking → CHECKED_IN.
+--   4. Chuyển trạng thái tất cả phòng liên kết → IN_USE.
+--   Tập trung logic vào một Procedure thay vì rải rác nhiều UPDATE, 
+--   đảm bảo tính nguyên tử (atomicity) của toàn bộ quy trình check-in.
+-- =========================================================
+CREATE OR REPLACE PROCEDURE sp_checkin_booking (
+    p_booking_id IN booking.booking_id%TYPE
+) IS
+    v_booking_status   booking.status%TYPE;
+    v_unavailable_room room.room_id%TYPE;
+    v_room_status      room.status%TYPE;
+BEGIN
+    -- 1. Lấy trạng thái hiện tại của booking và khóa dòng để tránh race condition
+    SELECT b.status
+    INTO   v_booking_status
+    FROM   booking b
+    WHERE  b.booking_id = p_booking_id
+    FOR UPDATE;
+
+    -- 2. Chỉ cho phép check-in khi booking ở trạng thái CONFIRMED
+    IF v_booking_status <> 'CONFIRMED' THEN
+        RAISE_APPLICATION_ERROR(
+            -20060,
+            'LỖI CHECK-IN: Booking phải ở trạng thái CONFIRMED để thực hiện check-in. ' ||
+            'Trạng thái hiện tại: ' || v_booking_status || '.'
+        );
+    END IF;
+
+    -- 3. Kiểm tra tất cả phòng liên kết phải AVAILABLE
+    BEGIN
+        SELECT r.room_id, r.status
+        INTO   v_unavailable_room, v_room_status
+        FROM   booking_room br
+        JOIN   room         r ON r.room_id = br.room_id
+        WHERE  br.booking_id = p_booking_id
+          AND  r.status      <> 'AVAILABLE'
+          AND  ROWNUM = 1;
+
+        -- Nếu tìm được phòng không AVAILABLE → báo lỗi
+        RAISE_APPLICATION_ERROR(
+            -20061,
+            'LỖI CHECK-IN: Phòng ' || v_unavailable_room ||
+            ' đang ở trạng thái ' || v_room_status ||
+            ', không thể thực hiện check-in.'
+        );
+
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN NULL;   -- Tất cả phòng đều AVAILABLE → tiếp tục
+    END;
+
+    -- 4. Chuyển trạng thái booking → CHECKED_IN
+    UPDATE booking
+    SET    status         = 'CHECKED_IN',
+           checkin_actual_at = SYSTIMESTAMP
+    WHERE  booking_id = p_booking_id;
+
+    -- 5. Chuyển tất cả phòng liên kết → IN_USE
+    UPDATE room r
+    SET    r.status = 'IN_USE'
+    WHERE  r.room_id IN (
+        SELECT br.room_id
+        FROM   booking_room br
+        WHERE  br.booking_id = p_booking_id
     );
 
 EXCEPTION
-    WHEN DUP_VAL_ON_INDEX THEN
-        RAISE_APPLICATION_ERROR(
-            -20042,
-            'This pet has already been assigned to this booking room.'
-        );
     WHEN NO_DATA_FOUND THEN
         RAISE_APPLICATION_ERROR(
-            -20043,
-            'Booking room does not exist.'
+            -20062,
+            'LỖI DỮ LIỆU: Không tìm thấy booking với booking_id = ' || p_booking_id || '.'
         );
-END;
+END sp_checkin_booking;
 /
 
--- 5. Cập nhật trạng thái hóa đơn dựa trên tổng tiền đã thanh toán
-CREATE OR REPLACE PROCEDURE update_orders_status (
-    p_order_id IN orders.order_id%TYPE
-)
-IS
-    v_total_paid   NUMBER;
-    v_grand_total  orders.grand_total%TYPE;
+-- =========================================================
+-- PROC-07: Thực hiện Check-out booking
+-- Bảng liên quan: booking, booking_room, room, orders
+-- Input: p_booking_id (Mã booking cần check-out)
+-- Mục đích:
+--   Thực hiện toàn bộ quy trình check-out một cách an toàn:
+--   1. Kiểm tra booking ở trạng thái CHECKED_IN mới cho phép check-out.
+--   2. Kiểm tra không còn dịch vụ nào đang IN_PROGRESS.
+--   3. Chuyển trạng thái booking → CHECKED_OUT.
+--   4. Trả tất cả phòng liên kết → AVAILABLE (TRG-12 cũng sẽ xử lý,
+--      nhưng Procedure làm rõ ý định nghiệp vụ).
+--   5. Cập nhật trạng thái hóa đơn bằng cách gọi PROC-05.
+--   Đảm bảo phòng được giải phóng ngay và hóa đơn được cập nhật đồng bộ.
+-- =========================================================
+CREATE OR REPLACE PROCEDURE sp_checkout_booking (
+    p_booking_id IN booking.booking_id%TYPE
+) IS
+    v_booking_status   booking.status%TYPE;
+    v_active_services  NUMBER;
+    v_order_id         orders.order_id%TYPE;
 BEGIN
-    SELECT ord.grand_total
-    INTO v_grand_total
-    FROM orders ord
-    WHERE ord.order_id = p_order_id;
+    -- 1. Lấy trạng thái booking và khóa dòng
+    SELECT b.status
+    INTO   v_booking_status
+    FROM   booking b
+    WHERE  b.booking_id = p_booking_id
+    FOR UPDATE;
 
-    SELECT NVL(SUM(p.amount), 0)
-    INTO v_total_paid
-    FROM payments p
-    WHERE p.order_id = p_order_id
-      AND p.status = 'SUCCESS';
-
-    IF v_total_paid > v_grand_total THEN
+    -- 2. Chỉ cho phép check-out khi booking đang CHECKED_IN
+    IF v_booking_status <> 'CHECKED_IN' THEN
         RAISE_APPLICATION_ERROR(
-            -20071,
-            'Total successful payment exceeds the order grand total.'
+            -20070,
+            'LỖI CHECK-OUT: Booking phải ở trạng thái CHECKED_IN để thực hiện check-out. ' ||
+            'Trạng thái hiện tại: ' || v_booking_status || '.'
         );
     END IF;
 
-    IF fn_is_order_ready_to_pay(p_order_id) THEN
-        UPDATE orders
-        SET status = CASE
-                        WHEN v_total_paid = 0 THEN 'PENDING'
-                        WHEN v_total_paid < v_grand_total THEN 'PARTIAL'
-                        WHEN v_total_paid = v_grand_total THEN 'PAID'
-                     END
-        WHERE order_id = p_order_id;
-    ELSE
-        UPDATE orders
-        SET status = CASE
-                        WHEN status IN ('CANCELLED', 'REFUNDED') THEN status
-                        WHEN v_total_paid = 0 THEN 'PENDING'
-                        ELSE 'PARTIAL'
-                     END
-        WHERE order_id = p_order_id;
+    -- 3. Kiểm tra không còn dịch vụ nào đang IN_PROGRESS
+    SELECT COUNT(*)
+    INTO   v_active_services
+    FROM   booking_services_pet bsp
+    WHERE  bsp.booking_id = p_booking_id
+      AND  bsp.status     = 'IN_PROGRESS';
+
+    IF v_active_services > 0 THEN
+        RAISE_APPLICATION_ERROR(
+            -20071,
+            'LỖI CHECK-OUT: Còn ' || v_active_services ||
+            ' dịch vụ đang thực hiện (IN_PROGRESS). Vui lòng hoàn thành trước khi check-out.'
+        );
     END IF;
+
+    -- 4. Chuyển trạng thái booking → CHECKED_OUT
+    UPDATE booking
+    SET    status             = 'CHECKED_OUT',
+           checkout_actual_at = SYSTIMESTAMP
+    WHERE  booking_id = p_booking_id;
+    -- Lưu ý: TRG-12 (trg_auto_update_room_available) sẽ tự động trả phòng về AVAILABLE
+
+    -- 5. Đồng bộ trạng thái hóa đơn liên quan
+    BEGIN
+        SELECT o.order_id
+        INTO   v_order_id
+        FROM   orders o
+        WHERE  o.booking_id = p_booking_id
+          AND  o.status    <> 'PAID'
+          AND  ROWNUM = 1;
+        -- Tự động chèn tiền phòng vào chi tiết hóa đơn
+        sp_insert_room_charges(p_booking_id, v_order_id);
+        -- Trigger trg_sync_order_totals sẽ tự động cập nhật subtotal/grand_total của bảng orders
+        update_orders_status(v_order_id);
+
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN NULL;   -- Không có hóa đơn chưa thanh toán → bỏ qua
+    END;
 
 EXCEPTION
     WHEN NO_DATA_FOUND THEN
         RAISE_APPLICATION_ERROR(
             -20072,
-            'Order does not exist.'
+            'LỖI DỮ LIỆU: Không tìm thấy booking với booking_id = ' || p_booking_id || '.'
         );
-END;
+END sp_checkout_booking;
 /
 
--- 6. Tạo hóa đơn từ booking
-CREATE OR REPLACE PROCEDURE sp_create_order_from_booking (
-    p_order_id       IN orders.order_id%TYPE,
-    p_booking_id     IN booking.booking_id%TYPE,
-    p_created_by_emp IN orders.created_by_emp%TYPE
-)
-IS
-    v_customer_id     booking.customer_id%TYPE;
-    v_branch_id       booking.branch_id%TYPE;
-    v_existing_count  NUMBER;
+-- =========================================================
+-- PROC-08: Tự động tính tiền phòng và chèn vào hóa đơn
+-- Bảng liên quan: booking_room, booking, room, type_room, order_details
+-- Input: p_booking_id (Mã booking cần tính tiền), p_order_id (Mã hóa đơn liên kết)
+-- Mục đích:
+--   Tự động hóa việc tính toán chi phí lưu trú thực tế và ghi nhận doanh thu:
+--   1. Truy xuất danh sách các phòng thuộc booking cùng với đơn giá (base_price_per_day) và thời gian (checkin_actual_at, checkout_actual_at).
+--   2. Tính toán số ngày lưu trú thực tế (Áp dụng làm tròn lên, mặc định tối thiểu là 1 ngày).
+--   3. Tính toán thành tiền phòng (line_total = số ngày * đơn giá).
+--   4. Thực hiện INSERT trực tiếp chi phí tiền phòng vào bảng order_details.
+--   Đảm bảo doanh thu tiền phòng được ghi nhận chính xác và tự động cập nhật vào tổng tiền hóa đơn trước khi khách thanh toán.
+-- =========================================================
+CREATE OR REPLACE PROCEDURE sp_insert_room_charges (
+    p_booking_id IN booking.booking_id%TYPE,
+    p_order_id   IN orders.order_id%TYPE
+) IS
+    v_days       NUMBER;
+    v_unit_price NUMBER;
+    v_line_total NUMBER;
+    v_booking_room_id booking_room.booking_room_id%TYPE;
 BEGIN
-    SELECT b.customer_id, b.branch_id
-    INTO v_customer_id, v_branch_id
-    FROM booking b
-    WHERE b.booking_id = p_booking_id;
+    -- 1. Duyệt qua tất cả các phòng trong booking này
+    FOR rec IN (
+        SELECT br.booking_room_id, tr.base_price_per_day,
+               b.checkin_actual_at, b.checkout_actual_at
+        FROM   booking_room br
+        JOIN   booking      b  ON b.booking_id   = br.booking_id
+        JOIN   room         r  ON r.room_id      = br.room_id
+        JOIN   type_room    tr ON tr.type_room_id = r.type_room_id
+        WHERE  br.booking_id = p_booking_id
+    ) LOOP
+        v_booking_room_id := rec.booking_room_id;
+        -- 2. Tính số ngày ở thực tế (Làm tròn lên, tối thiểu 1 ngày)
+        v_days := CEIL(EXTRACT(DAY FROM (rec.checkout_actual_at - rec.checkin_actual_at)) 
+                  + EXTRACT(HOUR FROM (rec.checkout_actual_at - rec.checkin_actual_at))/24);
+        
+        IF v_days <= 0 THEN v_days := 1; END IF;
 
-    SELECT COUNT(*)
-    INTO v_existing_count
-    FROM orders o
-    WHERE o.booking_id = p_booking_id;
+        v_unit_price := rec.base_price_per_day;
+        v_line_total := v_days * v_unit_price;
 
-    IF v_existing_count > 0 THEN
-        RAISE_APPLICATION_ERROR(
-            -20201,
-            'This booking already has an order.'
+        -- 3. Chèn vào order_details
+        -- Sử dụng SYS_GUID() hoặc logic sinh mã ID của bạn cho order_detail_id
+        INSERT INTO order_details (
+            order_detail_id, booking_room_id, order_id, 
+            quantity, unit_price, line_total, note
+        ) VALUES (
+            'DTL-' || TO_CHAR(SYSTIMESTAMP, 'SSSSS'), -- Ví dụ cách sinh ID tạm thời
+            rec.booking_room_id,
+            p_order_id,
+            v_days,
+            v_unit_price,
+            v_line_total,
+            'Tiền phòng tự động tính khi checkout'
         );
-    END IF;
-
-    INSERT INTO orders (
-        order_id,
-        customer_id,
-        branch_id,
-        booking_id,
-        created_by_emp,
-        status,
-        subtotal,
-        grand_total,
-        created_at
-    )
-    VALUES (
-        p_order_id,
-        v_customer_id,
-        v_branch_id,
-        p_booking_id,
-        p_created_by_emp,
-        'PENDING',
-        0,
-        0,
-        SYSTIMESTAMP
-    );
-
-    INSERT INTO order_details (
-        order_detail_id,
-        booking_room_id,
-        booking_service_id,
-        order_id,
-        note,
-        quantity,
-        unit_price,
-        line_total,
-        created_at
-    )
-    SELECT
-        'OD' || SUBSTR(RAWTOHEX(SYS_GUID()), 1, 8),
-        br.booking_room_id,
-        NULL,
-        p_order_id,
-        'Room charge',
-        GREATEST(
-            1,
-            CEIL(CAST(b.checkout_expected_at AS DATE) - CAST(b.checkin_expected_at AS DATE))
-        ),
-        tr.base_price_per_day,
-        GREATEST(
-            1,
-            CEIL(CAST(b.checkout_expected_at AS DATE) - CAST(b.checkin_expected_at AS DATE))
-        ) * tr.base_price_per_day,
-        SYSTIMESTAMP
-    FROM booking_room br
-    JOIN booking b
-        ON br.booking_id = b.booking_id
-    JOIN room r
-        ON br.room_id = r.room_id
-    JOIN type_room tr
-        ON r.type_room_id = tr.type_room_id
-    WHERE br.booking_id = p_booking_id
-      AND b.checkin_expected_at IS NOT NULL
-      AND b.checkout_expected_at IS NOT NULL;
-
-    INSERT INTO order_details (
-        order_detail_id,
-        booking_room_id,
-        booking_service_id,
-        order_id,
-        note,
-        quantity,
-        unit_price,
-        line_total,
-        created_at
-    )
-    SELECT
-        'OD' || SUBSTR(RAWTOHEX(SYS_GUID()), 1, 8),
-        NULL,
-        bsp.booking_service_id,
-        p_order_id,
-        'Service charge',
-        1,
-        s.base_price,
-        s.base_price,
-        SYSTIMESTAMP
-    FROM booking_services_pet bsp
-    JOIN services s
-        ON bsp.service_id = s.service_id
-    WHERE bsp.booking_id = p_booking_id
-      AND bsp.status <> 'CANCELLED';
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20202,
-            'Booking does not exist.'
-        );
-END;
-/
-
--- 7. Ghi nhận thanh toán cho hóa đơn
-CREATE OR REPLACE PROCEDURE sp_add_payment (
-    p_payment_id      IN payments.payment_id%TYPE,
-    p_order_id        IN payments.order_id%TYPE,
-    p_payment_method  IN payments.payment_method%TYPE,
-    p_provider        IN payments.provider%TYPE,
-    p_amount          IN payments.amount%TYPE,
-    p_note            IN payments.note%TYPE DEFAULT NULL
-)
-IS
-    v_order_status  orders.status%TYPE;
-    v_grand_total   orders.grand_total%TYPE;
-    v_total_paid    NUMBER;
-BEGIN
-    SELECT o.status, o.grand_total
-    INTO v_order_status, v_grand_total
-    FROM orders o
-    WHERE o.order_id = p_order_id
-    FOR UPDATE;
-
-    IF v_order_status = 'CANCELLED' THEN
-        RAISE_APPLICATION_ERROR(
-            -20210,
-            'Cancelled order cannot receive payment.'
-        );
-    END IF;
-
-    IF v_order_status = 'PAID' THEN
-        RAISE_APPLICATION_ERROR(
-            -20211,
-            'This order has already been fully paid.'
-        );
-    END IF;
-
-    IF p_amount <= 0 THEN
-        RAISE_APPLICATION_ERROR(
-            -20212,
-            'Payment amount must be greater than zero.'
-        );
-    END IF;
-
-    SELECT NVL(SUM(p.amount), 0)
-    INTO v_total_paid
-    FROM payments p
-    WHERE p.order_id = p_order_id
-      AND p.status = 'SUCCESS';
-
-    IF v_total_paid + p_amount > v_grand_total THEN
-        RAISE_APPLICATION_ERROR(
-            -20213,
-            'Payment amount exceeds the remaining order balance.'
-        );
-    END IF;
-
-    INSERT INTO payments (
-        payment_id,
-        order_id,
-        payment_method,
-        provider,
-        amount,
-        status,
-        paid_at,
-        note,
-        created_at,
-        updated_at
-    )
-    VALUES (
-        p_payment_id,
-        p_order_id,
-        p_payment_method,
-        p_provider,
-        p_amount,
-        'SUCCESS',
-        SYSTIMESTAMP,
-        p_note,
-        SYSTIMESTAMP,
-        SYSTIMESTAMP
-    );
-
-    update_orders_status(p_order_id);
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20214,
-            'Order does not exist.'
-        );
-END;
-/
-
--- 8. Cập nhật trạng thái dịch vụ đặt thêm
-CREATE OR REPLACE PROCEDURE sp_update_booking_service_status (
-    p_booking_service_id IN booking_services_pet.booking_service_id%TYPE,
-    p_new_status         IN booking_services_pet.status%TYPE,
-    p_note               IN booking_services_pet.note%TYPE DEFAULT NULL
-)
-IS
-    v_old_status booking_services_pet.status%TYPE;
-BEGIN
-    SELECT bsp.status
-    INTO v_old_status
-    FROM booking_services_pet bsp
-    WHERE bsp.booking_service_id = p_booking_service_id
-    FOR UPDATE;
-
-    IF p_new_status NOT IN ('PENDING', 'SCHEDULED', 'IN_PROGRESS', 'DONE', 'CANCELLED') THEN
-        RAISE_APPLICATION_ERROR(
-            -20220,
-            'Invalid booking service status.'
-        );
-    END IF;
-
-    IF v_old_status IN ('DONE', 'CANCELLED') THEN
-        RAISE_APPLICATION_ERROR(
-            -20221,
-            'Completed or cancelled service cannot be updated.'
-        );
-    END IF;
-
-    UPDATE booking_services_pet
-    SET status     = p_new_status,
-        note       = NVL(p_note, note),
-        updated_at = SYSTIMESTAMP
-    WHERE booking_service_id = p_booking_service_id;
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20222,
-            'Booking service does not exist.'
-        );
-END;
-/
-
--- 9. Check-in booking lưu trú
-CREATE OR REPLACE PROCEDURE sp_check_in_booking (
-    p_booking_id IN booking.booking_id%TYPE
-)
-IS
-    v_status booking.status%TYPE;
-BEGIN
-    SELECT b.status
-    INTO v_status
-    FROM booking b
-    WHERE b.booking_id = p_booking_id
-    FOR UPDATE;
-
-    IF v_status = 'CANCELLED' THEN
-        RAISE_APPLICATION_ERROR(
-            -20230,
-            'Cancelled booking cannot be checked in.'
-        );
-    END IF;
-
-    IF v_status = 'CHECKED_OUT' THEN
-        RAISE_APPLICATION_ERROR(
-            -20231,
-            'Checked-out booking cannot be checked in again.'
-        );
-    END IF;
-
-    IF v_status = 'CHECKED_IN' THEN
-        RAISE_APPLICATION_ERROR(
-            -20232,
-            'Booking has already been checked in.'
-        );
-    END IF;
-
-    UPDATE booking
-    SET status     = 'CHECKED_IN',
-        updated_at = SYSTIMESTAMP
-    WHERE booking_id = p_booking_id;
-
-    UPDATE room r
-    SET r.status = 'IN_USE'
-    WHERE r.room_id IN (
-        SELECT br.room_id
-        FROM booking_room br
-        WHERE br.booking_id = p_booking_id
-    );
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20233,
-            'Booking does not exist.'
-        );
-END;
-/
-
--- 10. Check-out booking lưu trú
-CREATE OR REPLACE PROCEDURE sp_check_out_booking (
-    p_booking_id IN booking.booking_id%TYPE
-)
-IS
-    v_status booking.status%TYPE;
-BEGIN
-    SELECT b.status
-    INTO v_status
-    FROM booking b
-    WHERE b.booking_id = p_booking_id
-    FOR UPDATE;
-
-    IF v_status = 'CANCELLED' THEN
-        RAISE_APPLICATION_ERROR(
-            -20240,
-            'Cancelled booking cannot be checked out.'
-        );
-    END IF;
-
-    IF v_status = 'CHECKED_OUT' THEN
-        RAISE_APPLICATION_ERROR(
-            -20241,
-            'Booking has already been checked out.'
-        );
-    END IF;
-
-    IF v_status <> 'CHECKED_IN' THEN
-        RAISE_APPLICATION_ERROR(
-            -20242,
-            'Only checked-in booking can be checked out.'
-        );
-    END IF;
-
-    UPDATE booking
-    SET status     = 'CHECKED_OUT',
-        updated_at = SYSTIMESTAMP
-    WHERE booking_id = p_booking_id;
-
-    UPDATE room r
-    SET r.status = 'AVAILABLE'
-    WHERE r.room_id IN (
-        SELECT br.room_id
-        FROM booking_room br
-        WHERE br.booking_id = p_booking_id
-    );
-
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        RAISE_APPLICATION_ERROR(
-            -20243,
-            'Booking does not exist.'
-        );
-END;
+    END LOOP;
+END sp_insert_room_charges;
 /

@@ -92,8 +92,6 @@ CREATE TABLE app_user (
     created_at       TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     updated_at       TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     CONSTRAINT pk_app_user PRIMARY KEY (user_id), -- [SỬA THEO ERD]
-    CONSTRAINT fk_app_user_employee FOREIGN KEY (employee_id) REFERENCES employee(employee_id),
-    CONSTRAINT fk_app_user_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id), -- [THÊM MỚI]
     CONSTRAINT uq_app_user_username UNIQUE (user_name),
     CONSTRAINT ck_app_user_is_active CHECK (is_active IN (0,1)),
     --0: INACTIVE; 1: ACTIVE
@@ -317,6 +315,20 @@ CREATE TABLE orders (
     --REFUND: Hoàn tiền
 );
 -- =========================================================
+-- 18. Booking_room
+-- =========================================================
+CREATE TABLE Booking_room(
+    booking_room_id VARCHAR2(10) NOT NULL,
+    booking_id      VARCHAR2(10) NOT NULL,
+    room_id         VARCHAR2(10) NOT NULL,
+    assigned_at     TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
+    note            CLOB,
+    CONSTRAINT pk_booking_room PRIMARY KEY(booking_room_id),
+    CONSTRAINT fk_bkr_booking_id FOREIGN KEY(booking_id) REFERENCES Booking(booking_id),
+    CONSTRAINT fk_bkr_room_id FOREIGN KEY(room_id) REFERENCES Room(room_id),
+    CONSTRAINT uq_booking_room UNIQUE (booking_id, room_id)
+    );
+-- =========================================================
 -- 16. ORDER_DETAILS
 -- =========================================================
 CREATE TABLE order_details (
@@ -329,9 +341,10 @@ CREATE TABLE order_details (
     unit_price           NUMBER(12,2) NOT NULL,
     line_total           NUMBER(12,2) NOT NULL,
     created_at           TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
+    
     CONSTRAINT pk_order_details PRIMARY KEY (order_detail_id),
-    CONSTRAINT fk_od_booking FOREIGN KEY (booking_id) REFERENCES booking(booking_id),
-    CONSTRAINT fk_od_service FOREIGN KEY (service_id) REFERENCES services(service_id),
+    CONSTRAINT fk_od_booking_room FOREIGN KEY (booking_room_id) REFERENCES booking_room(booking_room_id),
+    CONSTRAINT fk_od_booking_service FOREIGN KEY (booking_service_id) REFERENCES booking_services_pet(booking_service_id),
     CONSTRAINT fk_od_order FOREIGN KEY (order_id) REFERENCES orders(order_id),
     CONSTRAINT ck_od_qty CHECK (quantity > 0),
     CONSTRAINT ck_od_unit_price CHECK (unit_price >= 0),
@@ -366,20 +379,7 @@ CREATE TABLE payments (
     )
 
 );
--- =========================================================
--- 18. Booking_room
--- =========================================================
-CREATE TABLE Booking_room(
-    booking_room_id VARCHAR2(10) NOT NULL,
-    booking_id      VARCHAR2(10) NOT NULL,
-    room_id         VARCHAR2(10) NOT NULL,
-    assigned_at     TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
-    note            CLOB,
-    CONSTRAINT pk_booking_room PRIMARY KEY(booking_room_id),
-    CONSTRAINT fk_bkr_booking_id FOREIGN KEY(booking_id) REFERENCES Booking(booking_id),
-    CONSTRAINT fk_bkr_room_id FOREIGN KEY(room_id) REFERENCES Room(room_id),
-    CONSTRAINT uq_booking_room UNIQUE (booking_id, room_id)
-    );
+
 -- =========================================================
 -- 19. PET_HEALTH_RECORD
 -- =========================================================
@@ -421,7 +421,8 @@ CREATE TABLE service_product_standard (
     note                CLOB,
     created_at          TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     updated_at          TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
-    CONSTRAINT pk_service_product_standard PRIMARY KEY (standard_id),
+    
+    CONSTRAINT pk_service_product_standard PRIMARY KEY (service_id, product_id),
     CONSTRAINT fk_sps_service FOREIGN KEY (service_id) REFERENCES services(service_id),
     CONSTRAINT fk_sps_product FOREIGN KEY (product_id) REFERENCES product(product_id),
     CONSTRAINT ck_sps_weight_min CHECK (min_weight_kg >= 0),
@@ -505,11 +506,9 @@ CREATE TABLE stock_audit_detail (
     note                    CLOB,
     created_at              TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     updated_at              TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
-
-    CONSTRAINT pk_stock_audit_detail PRIMARY KEY (stock_audit_detail_id),
+    CONSTRAINT pk_sad PRIMARY KEY (stock_audit_id, product_id),
     CONSTRAINT fk_sad_audit FOREIGN KEY (stock_audit_id) REFERENCES stock_audit(stock_audit_id),
     CONSTRAINT fk_sad_product FOREIGN KEY (product_id) REFERENCES product(product_id),
-    CONSTRAINT uq_sad_audit_product UNIQUE (stock_audit_id, product_id),
     CONSTRAINT ck_sad_system_quantity CHECK (system_quantity >= 0),
     CONSTRAINT ck_sad_actual_quantity CHECK (actual_quantity >= 0),
     CONSTRAINT ck_sad_difference_rate CHECK (difference_rate IS NULL OR difference_rate >= 0)
@@ -537,3 +536,7 @@ CREATE TABLE material_waste (
     CONSTRAINT ck_mw_waste_quantity CHECK (waste_quantity > 0),
     CONSTRAINT ck_mw_status CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED'))
 );
+
+--Thêm thời gian CheckIn-CheckOut thực tế
+ALTER TABLE booking ADD checkin_actual_at TIMESTAMP(6) WITH TIME ZONE;
+ALTER TABLE booking ADD checkout_actual_at TIMESTAMP(6) WITH TIME ZONE;

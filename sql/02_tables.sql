@@ -83,7 +83,7 @@ CREATE TABLE employee (
 -- 4. APP_USER
 -- =========================================================
 CREATE TABLE app_user (
-    user_id          VARCHAR2(10) NOT NULL, -- [THÊM MỚI - Đổi từ employee_id thành user_id làm PK theo ERD]
+    user_id          VARCHAR2(10) NOT NULL, 
     password_hash    NVARCHAR2(255),
     role_emp         NVARCHAR2(20) NOT NULL,
     user_name        NVARCHAR2(254) NOT NULL,
@@ -408,12 +408,13 @@ CREATE TABLE Booking_room_pet (
     CONSTRAINT fk_brp_booking_room FOREIGN KEY (booking_room_id) REFERENCES booking_room(booking_room_id)
 );
 -- =========================================================
--- 21. Service_product_standard
+-- 21. Service_product_standard (Surrogate Key Version)
 -- =========================================================
 CREATE TABLE service_product_standard (
+    standard_id         VARCHAR2(10) NOT NULL, 
     service_id          VARCHAR2(10) NOT NULL,
     product_id          VARCHAR2(10) NOT NULL,
-    species             VARCHAR2(20) NOT NULL, -- [THÊM MỚI ĐỂ KHỚP VỚI CONSTRAINT PHÍA DƯỚI]
+    species             VARCHAR2(20) NOT NULL,
     min_weight_kg       NUMBER(5,2) NOT NULL,
     max_weight_kg       NUMBER(5,2) NOT NULL,
     usage_amount        NUMBER(10,2) NOT NULL,
@@ -422,14 +423,19 @@ CREATE TABLE service_product_standard (
     created_at          TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     updated_at          TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP,
     
-    CONSTRAINT pk_service_product_standard PRIMARY KEY (service_id, product_id),
+    -- 1. KHÓA CHÍNH ĐƠN (Dùng để định danh và tối ưu truy vấn)
+    CONSTRAINT pk_service_product_standard PRIMARY KEY (standard_id),
+    
+    -- 2. RÀNG BUỘC DUY NHẤT (Đảm bảo logic nghiệp vụ không bị trùng lặp)
+    CONSTRAINT uq_sps_logic UNIQUE (service_id, product_id, species, min_weight_kg),
+    
     CONSTRAINT fk_sps_service FOREIGN KEY (service_id) REFERENCES services(service_id),
     CONSTRAINT fk_sps_product FOREIGN KEY (product_id) REFERENCES product(product_id),
     CONSTRAINT ck_sps_weight_min CHECK (min_weight_kg >= 0),
     CONSTRAINT ck_sps_weight_max CHECK (max_weight_kg > 0),
     CONSTRAINT ck_sps_weight_range CHECK (max_weight_kg > min_weight_kg),
     CONSTRAINT ck_sps_usage_amount CHECK (usage_amount > 0),
-    CONSTRAINT ck_sps_usage_unit CHECK (usage_unit IN ('ML','L','G','KG')),-- nhớ có function chỗ này
+    CONSTRAINT ck_sps_usage_unit CHECK (usage_unit IN ('ML','L','G','KG')),
     CONSTRAINT ck_sps_species CHECK (species IN ('DOG','CAT'))
 );
 -- =========================================================

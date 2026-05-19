@@ -2,18 +2,14 @@
 
 namespace App\Models;
 
-class BranchInventory extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class BranchInventory extends Model
 {
     protected $table = 'branch_inventory';
+    protected $primaryKey = 'branch_inventory_id';
 
-    // Bỏ qua primary key đơn
-    protected $primaryKey = null;
-    public $incrementing = false;
-
-    // Tắt timestamp vì database đang dùng tự động cập nhật SQL (ON UPDATE CURRENT_TIMESTAMP)
-    public $timestamps = false;
-
-    protected $fillable = ['branch_id', 'product_id', 'quantity_in_stock', 'reorder_point'];
+    protected $guarded = [];
 
     public function branch()
     {

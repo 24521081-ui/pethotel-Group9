@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
-class Order extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class Order extends Model
 {
     protected $table = 'orders';
     protected $primaryKey = 'order_id';
-    protected $fillable = ['order_id', 'customer_id', 'branch_id', 'booking_id', 'created_by_emp', 'status', 'subtotal', 'grand_total', 'created_at'];
 
-    const UPDATED_AT = null;
+    protected $guarded = [];
+
     public function customer()
     {
         return $this->belongsTo(Customer::class, 'customer_id', 'customer_id');
@@ -24,19 +26,23 @@ class Order extends BaseModel
         return $this->belongsTo(Booking::class, 'booking_id', 'booking_id');
     }
 
-    public function employee()
+    public function createdByEmployee()
     {
         return $this->belongsTo(Employee::class, 'created_by_emp', 'employee_id');
     }
 
-    public function orderDetails()
+    public function createdByUser()
     {
-        return $this->hasMany(OrderDetail::class, 'order_id', 'order_id');
+        return $this->belongsTo(User::class, 'created_by_user_id', 'id');
     }
 
-    // Quan hệ 1-1: 1 Hóa đơn chỉ có 1 lần Thanh toán
-    public function payment()
+    public function coupon()
     {
-        return $this->hasOne(Payment::class, 'order_id', 'order_id');
+        return $this->belongsTo(Coupon::class, 'coupon_id', 'coupon_id');
+    }
+
+    public function details()
+    {
+        return $this->hasMany(OrderDetail::class, 'order_id', 'order_id');
     }
 }

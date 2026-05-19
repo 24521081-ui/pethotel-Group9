@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
-class TypeRoom extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class TypeRoom extends Model
 {
     protected $table = 'type_room';
     protected $primaryKey = 'type_room_id';
-    protected $fillable = ['type_room_id', 'type_name', 'note', 'max_pets', 'max_weight_kg', 'base_price_per_day', 'is_active'];
+
+    protected $guarded = [];
 
     public function rooms()
     {

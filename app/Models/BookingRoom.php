@@ -2,15 +2,14 @@
 
 namespace App\Models;
 
-class BookingRoom extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class BookingRoom extends Model
 {
-    protected $table = 'booking_room'; // Chú ý hoa thường theo Migration của bạn
+    protected $table = 'booking_room';
     protected $primaryKey = 'booking_room_id';
 
-    // Bảng này SQL chỉ có assigned_at, không có updated_at
-    public $timestamps = false;
-
-    protected $fillable = ['booking_room_id', 'booking_id', 'room_id', 'assigned_at', 'note'];
+    protected $guarded = [];
 
     public function booking()
     {
@@ -22,9 +21,13 @@ class BookingRoom extends BaseModel
         return $this->belongsTo(Room::class, 'room_id', 'room_id');
     }
 
-    public function pets()
+    public function bookingRoomPets()
     {
-        return $this->belongsToMany(Pet::class, 'booking_room_pet', 'booking_room_id', 'pet_id')
-            ->withPivot('assigned_at', 'note');
+        return $this->hasMany(BookingRoomPet::class, 'booking_room_id', 'booking_room_id');
+    }
+
+    public function orderDetails()
+    {
+        return $this->hasMany(OrderDetail::class, 'booking_room_id', 'booking_room_id');
     }
 }

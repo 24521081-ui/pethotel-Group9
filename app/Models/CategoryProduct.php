@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
-class CategoryProduct extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class CategoryProduct extends Model
 {
     protected $table = 'category_product';
     protected $primaryKey = 'product_category_id';
-    protected $fillable = ['product_category_id', 'category_name'];
+
+    protected $guarded = [];
 
     public function products()
     {

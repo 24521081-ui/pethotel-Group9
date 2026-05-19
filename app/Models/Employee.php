@@ -2,31 +2,37 @@
 
 namespace App\Models;
 
-class Employee extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class Employee extends Model
 {
     protected $table = 'employee';
     protected $primaryKey = 'employee_id';
-    protected $fillable = ['employee_id', 'user_id', 'branch_id', 'full_name', 'salary', 'email', 'phone', 'hire_date', 'status_code', 'note'];
+
+    protected $guarded = [];
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'id');
+    }
 
     public function branch()
     {
         return $this->belongsTo(Branch::class, 'branch_id', 'branch_id');
     }
 
-    public function orders()
+    public function coupons()
     {
-        return $this->hasMany(Order::class, 'created_by_emp', 'employee_id');
+        return $this->hasMany(Coupon::class, 'employee_id', 'employee_id');
     }
 
-    // Quan hệ 1-1: Nhân viên có 1 Tài khoản đăng nhập
-    public function user()
-    {
-        return $this->hasOne(User::class, 'employee_id', 'employee_id');
-    }
-
-    // Quan hệ 1-N: Nhân viên thực hiện nhiều Dịch vụ cho Thú cưng
-    public function bookingServicesPet()
+    public function bookingServicePets()
     {
         return $this->hasMany(BookingServicePet::class, 'employee_id', 'employee_id');
+    }
+
+    public function createdOrders()
+    {
+        return $this->hasMany(Order::class, 'created_by_emp', 'employee_id');
     }
 }

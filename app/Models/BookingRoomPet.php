@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
-class BookingRoomPet extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class BookingRoomPet extends Model
 {
     protected $table = 'booking_room_pet';
-    protected $primaryKey = null;
-    public $incrementing = false;
-    public $timestamps = false;
+    protected $primaryKey = 'booking_room_pet_id';
 
-    protected $fillable = ['booking_room_id', 'pet_id', 'assigned_at', 'note'];
+    protected $guarded = [];
 
     public function bookingRoom()
     {

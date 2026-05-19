@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
-class CategoryService extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class CategoryService extends Model
 {
     protected $table = 'category_services';
     protected $primaryKey = 'service_category_id';
-    protected $fillable = ['service_category_id', 'category_name', 'note'];
+
+    protected $guarded = [];
 
     public function services()
     {

@@ -2,20 +2,18 @@
 
 namespace App\Models;
 
-class Branch extends BaseModel
+use Illuminate\Database\Eloquent\Model;
+
+class Branch extends Model
 {
     protected $table = 'branch';
     protected $primaryKey = 'branch_id';
-    protected $fillable = ['branch_id', 'branch_name', 'phone', 'email', 'address', 'is_active'];
+
+    protected $guarded = [];
 
     public function rooms()
     {
         return $this->hasMany(Room::class, 'branch_id', 'branch_id');
-    }
-
-    public function bookings()
-    {
-        return $this->hasMany(Booking::class, 'branch_id', 'branch_id');
     }
 
     public function employees()
@@ -23,15 +21,18 @@ class Branch extends BaseModel
         return $this->hasMany(Employee::class, 'branch_id', 'branch_id');
     }
 
+    public function bookings()
+    {
+        return $this->hasMany(Booking::class, 'branch_id', 'branch_id');
+    }
+
     public function orders()
     {
         return $this->hasMany(Order::class, 'branch_id', 'branch_id');
     }
 
-    // [BỔ SUNG THÊM] Quan hệ N-N để lấy danh sách sản phẩm tồn kho của Chi nhánh
-    public function products()
+    public function inventories()
     {
-        return $this->belongsToMany(Product::class, 'branch_inventory', 'branch_id', 'product_id')
-            ->withPivot('quantity_in_stock', 'reorder_point', 'last_updated');
+        return $this->hasMany(BranchInventory::class, 'branch_id', 'branch_id');
     }
 }

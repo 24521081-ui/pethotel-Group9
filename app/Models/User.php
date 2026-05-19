@@ -10,45 +10,85 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    // 1. Chỉ định tên khóa chính (Vì mặc định Laravel tìm cột 'id')
-    protected $primaryKey = 'user_id';
+    protected $table = 'users';
+    protected $primaryKey = 'id';
 
-    // 2. Tắt tính năng tự động tăng (Vì chúng ta dùng mã chuỗi như USR001)
-    public $incrementing = false;
-
-    // 3. Khai báo kiểu dữ liệu của khóa chính là chuỗi
-    protected $keyType = 'string';
-
-    /**
-     * Các thuộc tính được phép insert/update (Mass Assignable)
-     */
     protected $fillable = [
-        'user_id',
-        'employee_id',
-        'customer_id',
-        'username',
+        'name',
+        'email',
         'password',
-        'role_emp',
+        'role',
         'is_active',
-        'last_login',
+        'last_login_at',
     ];
 
-    /**
-     * Các thuộc tính bị ẩn đi (không hiển thị khi trả về JSON/API)
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Ép kiểu dữ liệu tự động
-     */
     protected function casts(): array
     {
         return [
-            'password' => 'hashed', // Tự động mã hóa mật khẩu khi lưu
-            'last_login' => 'datetime',
+            'email_verified_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'is_active' => 'boolean',
+            'password' => 'hashed',
         ];
+    }
+
+    public function customer()
+    {
+        return $this->hasOne(Customer::class, 'user_id', 'id');
+    }
+
+    public function employee()
+    {
+        return $this->hasOne(Employee::class, 'user_id', 'id');
+    }
+
+    public function auditLogs()
+    {
+        return $this->hasMany(AuditLog::class, 'changed_by_user_id', 'id');
+    }
+
+    public function createdOrders()
+    {
+        return $this->hasMany(Order::class, 'created_by_user_id', 'id');
+    }
+
+    public function isCustomer(): bool
+    {
+        return $this->role === 'CUSTOMER';
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'ADMIN';
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === 'MANAGER';
+    }
+
+    public function isReceptionist(): bool
+    {
+        return $this->role === 'RECEPTIONIST';
+    }
+
+    public function isGroomer(): bool
+    {
+        return $this->role === 'GROOMER';
+    }
+
+    public function isStaff(): bool
+    {
+        return in_array($this->role, [
+            'ADMIN',
+            'MANAGER',
+            'RECEPTIONIST',
+            'GROOMER',
+        ]);
     }
 }

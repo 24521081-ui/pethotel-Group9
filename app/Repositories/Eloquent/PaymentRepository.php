@@ -26,10 +26,10 @@ class PaymentRepository implements PaymentRepositoryInterface
             return null;
         }
 
+        $order = $this->ensureOrderForBooking($booking, $user);
+
         return [
-            'payment' => ($order = $this->existingOrderForBooking($booking))
-                ? $this->paymentViewData($order)
-                : $this->bookingPaymentPreviewData($booking),
+            'payment' => $this->paymentViewData($order),
         ];
     }
 

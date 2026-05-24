@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -19,7 +18,6 @@ return new class extends Migration
             $table->timestamp('changed_at')->useCurrent();
             $table->index(['table_name', 'changed_at']);
         });
-        DB::statement('ALTER TABLE audit_log AUTO_INCREMENT = 1');
     }
 
     public function down(): void

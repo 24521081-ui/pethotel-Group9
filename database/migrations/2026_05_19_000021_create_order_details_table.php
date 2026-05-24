@@ -11,23 +11,43 @@ return new class extends Migration
     {
         Schema::create('order_details', function (Blueprint $table) {
             $table->id('order_detail_id');
+
             $table->unsignedBigInteger('order_id');
+
             $table->unsignedBigInteger('booking_room_id')->nullable();
             $table->unsignedBigInteger('booking_service_pet_id')->nullable();
+
             $table->string('title', 200);
             $table->integer('quantity')->default(1);
             $table->decimal('unit_price', 10, 2);
             $table->decimal('line_total', 10, 2);
             $table->timestamps();
-            $table->foreign('order_id')->references('order_id')->on('orders')->cascadeOnUpdate()->cascadeOnDelete();
-            $table->foreign('booking_room_id')->references('booking_room_id')->on('booking_room')->cascadeOnUpdate()->nullOnDelete();
-            $table->foreign('booking_service_pet_id')->references('booking_service_pet_id')->on('booking_service_pet')->cascadeOnUpdate()->nullOnDelete();
+
+            $table->foreign('order_id')
+                ->references('order_id')
+                ->on('orders')
+                ->cascadeOnUpdate()
+                ->cascadeOnDelete();
+
+            // Không dùng cascadeOnUpdate() / nullOnDelete()
+            // vì 2 cột này đang được dùng trong CHECK constraint
+            $table->foreign('booking_room_id')
+                ->references('booking_room_id')
+                ->on('booking_room');
+
+            $table->foreign('booking_service_pet_id')
+                ->references('booking_service_pet_id')
+                ->on('booking_service_pet');
         });
+
         DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_quantity CHECK (quantity > 0)');
         DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_unit_price CHECK (unit_price >= 0)');
         DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_line_total CHECK (line_total >= 0)');
         DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_line_calc CHECK (line_total = quantity * unit_price)');
-        DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_has_ref CHECK (booking_room_id IS NOT NULL OR booking_service_pet_id IS NOT NULL)');
+
+        DB::statement('ALTER TABLE order_details ADD CONSTRAINT chk_od_has_ref CHECK (
+            booking_room_id IS NOT NULL OR booking_service_pet_id IS NOT NULL
+        )');
     }
 
     public function down(): void

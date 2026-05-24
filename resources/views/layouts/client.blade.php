@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Pet Hotel')</title>
 
     {{-- CSS chính của client --}}
@@ -26,6 +27,9 @@
     {{-- CSS trang khách sạn cho mèo --}}   
     <link rel="stylesheet" href="{{ asset('assets/client/css/cat-hotel.css') }}">
 
+    {{-- CSS trang chi tiết loại phòng --}}
+    <link rel="stylesheet" href="{{ asset('assets/client/css/type-room.css') }}">
+
     {{-- CSS trang chính sách --}} 
     <link rel="stylesheet" href="{{ asset('assets/client/css/policy.css') }}">
 
@@ -33,7 +37,13 @@
     <link rel="stylesheet" href="{{ asset('assets/client/css/grooming.css') }}">
 
      {{-- CSS reponsive --}} 
-    <link rel="stylesheet" href="{{ asset('assets/client/css/responsive.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/client/css/reponsive.css') }}">
+
+    {{-- CSS navbar client --}}
+    <link rel="stylesheet" href="{{ asset('assets/client/css/partials/navbar.css') }}">
+
+    {{-- CSS footer client --}}
+    <link rel="stylesheet" href="{{ asset('assets/client/css/partials/footer.css') }}">
 
     {{-- Font Awesome để dùng icon mũi tên dropdown --}}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -51,6 +61,8 @@
     @include('partials.client.footer')
 
     <script src="{{ asset('assets/client/js/main.js') }}"></script>
+    <script src="{{ asset('assets/client/js/hooks/api-hooks.js') }}"></script>
+    <script src="{{ asset('assets/client/js/partials/navbar.js') }}"></script>
 
     @stack('scripts')
 </body>

@@ -72,6 +72,7 @@
     border-radius: 6px;
     font-weight: 700;
     transition: 0.2s ease;
+    padding: 0 24px;
 }
 
 .cat-primary-btn {

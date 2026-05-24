@@ -230,7 +230,7 @@
 
 .discount-form {
     display: grid;
-    grid-template-columns: 1fr 90px;
+    grid-template-columns: 1fr;
     gap: 8px;
 }
 
@@ -257,6 +257,14 @@
 .discount-form button:hover {
     border-color: #f59e0b;
     color: #f59e0b;
+}
+
+.discount-row {
+    margin-top: 16px;
+}
+
+.discount-row strong {
+    color: #16a34a;
 }
 
 .order-total span {

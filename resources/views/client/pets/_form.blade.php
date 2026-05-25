@@ -2,18 +2,13 @@
 $method = $method ?? 'POST';
 $pet = $pet ?? null;
 $selectedSpecies = old('species', $pet->species ?? '');
-$selectedGender = old('gender', $pet->sex ?? $pet->gender ?? 'UNKNOWN');
+$selectedGender = old('gender', $pet->sex ?? 'UNKNOWN');
 $rawImage = $pet ? collect([
-$pet->pet_image_url ?? null,
 $pet->pet_image ?? null,
-$pet->image_url ?? null,
-$pet->avatar_url ?? null,
 ])->first(fn ($value) => filled($value)) : null;
 
 if ($rawImage && str_starts_with($rawImage, 'http')) {
 $petImageUrl = $rawImage;
-} elseif ($rawImage && str_starts_with($rawImage, 'assets/')) {
-$petImageUrl = asset($rawImage);
 } elseif ($rawImage) {
 $petImageUrl = asset('storage/'.$rawImage);
 } else {
@@ -95,7 +90,7 @@ $petImageUrl = null;
   <div class="pet-form-group">
     <label for="special_notes">Ghi chú</label>
     <textarea id="special_notes" name="special_notes" class="pet-form-control" rows="4"
-      placeholder="Tính cách, thói quen, lưu ý chăm sóc...">{{ old('special_notes', $pet->special_notes ?? $pet->special_note ?? '') }}</textarea>
+      placeholder="Tính cách, thói quen, lưu ý chăm sóc...">{{ old('special_notes', $pet->special_notes ?? '') }}</textarea>
     <span class="error-msg" id="error-special_notes">@error('special_notes'){{ $message }}@enderror</span>
   </div>
 

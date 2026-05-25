@@ -40,10 +40,29 @@ class Booking extends Model
             ->with('room')
             ->get()
             ->each(function (BookingRoom $bookingRoom) use ($status): void {
-                if ($bookingRoom->room && $bookingRoom->room->status !== 'MAINTENANCE') {
-                    $bookingRoom->room->update(['status' => $status]);
+                if (! $bookingRoom->room || $bookingRoom->room->status === 'MAINTENANCE') {
+                    return;
                 }
+
+                if ($status === 'AVAILABLE' && $this->roomHasAnotherActiveOverlap($bookingRoom)) {
+                    return;
+                }
+
+                $bookingRoom->room->update(['status' => $status]);
             });
+    }
+
+    private function roomHasAnotherActiveOverlap(BookingRoom $bookingRoom): bool
+    {
+        return BookingRoom::query()
+            ->where('room_id', $bookingRoom->room_id)
+            ->where('booking_id', '<>', $this->booking_id)
+            ->whereHas('booking', function ($query): void {
+                $query->whereIn('status', ['PENDING', 'CONFIRMED', 'CHECKED_IN'])
+                    ->where('checkin_expected_at', '<', $this->checkout_expected_at)
+                    ->where('checkout_expected_at', '>', $this->checkin_expected_at);
+            })
+            ->exists();
     }
 
     public function customer()
@@ -61,9 +80,20 @@ class Booking extends Model
         return $this->hasMany(BookingRoom::class, 'booking_id', 'booking_id');
     }
 
+    public function rooms()
+    {
+        return $this->belongsToMany(Room::class, 'booking_room', 'booking_id', 'room_id', 'booking_id', 'room_id')
+            ->withPivot(['booking_room_id', 'assigned_at', 'notes']);
+    }
+
     public function bookingServicePets()
     {
         return $this->hasMany(BookingServicePet::class, 'booking_id', 'booking_id');
+    }
+
+    public function bookingServicesPet()
+    {
+        return $this->bookingServicePets();
     }
 
     public function orders()

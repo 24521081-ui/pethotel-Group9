@@ -9,9 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('orders', function (Blueprint $table): void {
-            $table->string('customer_name', 100)->nullable()->after('created_by_user_id');
-            $table->string('customer_phone', 20)->nullable()->after('customer_name');
-            $table->string('customer_email', 255)->nullable()->after('customer_phone');
+            $table->string('customer_name', 100)->nullable();
+            $table->string('customer_phone', 20)->nullable();
+            $table->string('customer_email', 255)->nullable();
         });
     }
 

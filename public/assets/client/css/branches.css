@@ -176,6 +176,33 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+    position: relative;
+    transition: opacity 0.2s ease;
+}
+
+.branch-list.is-loading {
+    opacity: 0.56;
+    pointer-events: none;
+}
+
+.branch-feedback {
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 800;
+    margin: -6px 0 14px;
+    padding: 12px 14px;
+}
+
+.branch-feedback.is-loading {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+}
+
+.branch-feedback.is-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
 }
 
 .branch-card {

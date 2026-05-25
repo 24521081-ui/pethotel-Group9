@@ -49,8 +49,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const bookingSubmitBtn = document.getElementById("bookingSubmitBtn");
     const summaryActionHint = document.getElementById("summaryActionHint");
     const datePrerequisite = document.getElementById("bookingDatePrerequisite");
+    const availabilityStatus = document.getElementById(
+        "bookingAvailabilityStatus",
+    );
     const bookingHoldBtn = document.getElementById("bookingHoldBtn");
     const bookingActionInput = document.getElementById("bookingAction");
+    const roomMessageEl = document.querySelector("[data-room-message]");
+    let latestAvailabilityRequestId = 0;
 
     const today = parseIsoDate(data.today) || normalizeDate(new Date());
     const isAuthenticated = Boolean(data.isAuthenticated);
@@ -79,6 +84,137 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function parseNullableNumber(value) {
+        if (value === null || value === undefined || value === "") {
+            return null;
+        }
+
+        const number = Number(value);
+
+        return Number.isNaN(number) ? null : number;
+    }
+
+    function showRoomMessage(message) {
+        if (!roomMessageEl) {
+            return;
+        }
+
+        roomMessageEl.textContent = message || "";
+        roomMessageEl.hidden = !message;
+    }
+
+    function clearRoomMessage() {
+        showRoomMessage("");
+    }
+
+    function setAvailabilityStatus(message, type = "") {
+        if (!availabilityStatus) {
+            return;
+        }
+
+        availabilityStatus.textContent = message || "";
+        availabilityStatus.hidden = !message;
+        availabilityStatus.classList.toggle("is-error", type === "error");
+        availabilityStatus.classList.toggle("is-loading", type === "loading");
+    }
+
+    function availabilityRequestParams() {
+        const params = new URLSearchParams();
+
+        if (state.checkin && state.checkout && state.checkout > state.checkin) {
+            params.set("check_in", toIsoDate(state.checkin));
+            params.set("check_out", toIsoDate(state.checkout));
+        }
+
+        return params;
+    }
+
+    function updateRoomAvailabilityCards(roomTypes) {
+        const availabilityById = new Map(
+            roomTypes.map((roomType) => [
+                String(roomType.id || roomType.type_room_id),
+                Number(roomType.available_rooms ?? roomType.availableRooms ?? 0),
+            ]),
+        );
+
+        roomCards.forEach((card) => {
+            const availableRooms = availabilityById.get(card.dataset.roomId);
+
+            if (availableRooms === undefined) {
+                return;
+            }
+
+            card.dataset.roomAvailableRooms = String(availableRooms);
+
+            if (state.room && String(state.room.id) === String(card.dataset.roomId)) {
+                state.room.availableRooms = availableRooms;
+            }
+
+            const label = card.querySelector("[data-room-availability]");
+
+            if (label) {
+                label.innerHTML = `<i class="fa-solid fa-door-open"></i> Còn ${availableRooms} phòng`;
+            }
+        });
+    }
+
+    function fetchRoomTypeAvailability() {
+        if (!data.roomTypeAvailabilityUrl) {
+            return Promise.resolve();
+        }
+
+        const requestId = ++latestAvailabilityRequestId;
+        const params = availabilityRequestParams();
+        const url = new URL(data.roomTypeAvailabilityUrl, window.location.origin);
+
+        params.forEach((value, key) => url.searchParams.set(key, value));
+        setAvailabilityStatus("Đang cập nhật số phòng trống...", "loading");
+        roomCards.forEach((card) => card.classList.add("is-updating-availability"));
+
+        return fetch(url.toString(), {
+            headers: {
+                Accept: "application/json",
+            },
+        })
+            .then(async (response) => {
+                const payload = await response.json().catch(() => ({}));
+
+                if (!response.ok || payload.success === false) {
+                    throw new Error(
+                        payload.message ||
+                            "Không thể cập nhật số phòng trống. Vui lòng thử lại.",
+                    );
+                }
+
+                if (requestId !== latestAvailabilityRequestId) {
+                    return;
+                }
+
+                updateRoomAvailabilityCards(Array.isArray(payload.data) ? payload.data : []);
+                setAvailabilityStatus("");
+            })
+            .catch((error) => {
+                if (requestId !== latestAvailabilityRequestId) {
+                    return;
+                }
+
+                setAvailabilityStatus(
+                    error.message ||
+                        "Không thể cập nhật số phòng trống. Vui lòng thử lại.",
+                    "error",
+                );
+            })
+            .finally(() => {
+                if (requestId !== latestAvailabilityRequestId) {
+                    return;
+                }
+
+                roomCards.forEach((card) =>
+                    card.classList.remove("is-updating-availability"),
+                );
+            });
     }
 
     function toIsoDate(date) {
@@ -227,10 +363,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function selectRoom(card) {
-        if (card.disabled || card.classList.contains("room-sold-out")) {
-            return;
-        }
-
         roomCards.forEach((item) => {
             item.classList.remove("active");
             item.setAttribute("aria-pressed", "false");
@@ -244,9 +376,12 @@ document.addEventListener("DOMContentLoaded", function () {
             name: card.dataset.roomName,
             price: Number(card.dataset.roomPrice || 0),
             maxPets: Number(card.dataset.roomMaxPets || 1),
-            maxWeight: Number(card.dataset.roomMaxWeight || 0),
+            minWeight: parseNullableNumber(card.dataset.roomMinWeight),
+            maxWeight: parseNullableNumber(card.dataset.roomMaxWeight),
+            availableRooms: Number(card.dataset.roomAvailableRooms || 0),
         };
 
+        clearRoomMessage();
         roomTypeInput.value = state.room.id;
         calendarRoom.textContent = state.room.name;
         state.calendarMonth = startOfMonth(state.checkin || today);
@@ -424,6 +559,7 @@ document.addEventListener("DOMContentLoaded", function () {
             renderCalendar();
             updateStepVisibility();
             updateSummary();
+            fetchRoomTypeAvailability();
             return;
         }
 
@@ -451,6 +587,7 @@ document.addEventListener("DOMContentLoaded", function () {
         renderCalendar();
         updateStepVisibility();
         updateSummary();
+        fetchRoomTypeAvailability();
     }
 
     function syncDateInputs() {
@@ -521,6 +658,7 @@ document.addEventListener("DOMContentLoaded", function () {
         renderCalendar();
         updateStepVisibility();
         updateSummary();
+        fetchRoomTypeAvailability();
     }
 
     function hasValidStay() {
@@ -605,7 +743,7 @@ document.addEventListener("DOMContentLoaded", function () {
             species: item.dataset.petSpecies,
             breed: item.dataset.petBreed,
             sex: item.dataset.petSex,
-            weight: Number(item.dataset.petWeight || 0),
+            weight: parseNullableNumber(item.dataset.petWeight),
             isInRoom: item.dataset.petInRoom === "1",
             roomMessage:
                 item.dataset.petRoomMessage ||
@@ -625,17 +763,51 @@ document.addEventListener("DOMContentLoaded", function () {
             return { ok: false, message: "Vui lòng chọn loại phòng trước." };
         }
 
-        if (!alreadySelected && state.selectedPets.size >= state.room.maxPets) {
+        if (
+            !alreadySelected &&
+            state.room.maxPets <= 1 &&
+            state.selectedPets.size > 0 &&
+            !state.selectedPets.has(pet.id)
+        ) {
             return {
                 ok: false,
-                message: `Phòng ${state.room.name} tối đa ${state.room.maxPets} bé.`,
+                message:
+                    "Bạn không thể chọn vì không đạt điều kiện. Nếu muốn chọn thú cưng khác, vui lòng hủy thú cưng đang chọn trước.",
             };
         }
 
-        if (state.room.maxWeight > 0 && pet.weight > state.room.maxWeight) {
+        if (!alreadySelected && state.selectedPets.size >= state.room.maxPets) {
             return {
                 ok: false,
-                message: `${pet.name} nặng ${pet.weight}kg, vượt mức ${state.room.maxWeight}kg của phòng ${state.room.name}.`,
+                message: "Phòng này đã đủ số lượng thú cưng cho phép.",
+            };
+        }
+
+        if (pet.weight === null) {
+            return {
+                ok: false,
+                message:
+                    "Thú cưng chưa có thông tin cân nặng, vui lòng cập nhật trước khi chọn phòng.",
+            };
+        }
+
+        if (
+            state.room.minWeight !== null &&
+            pet.weight < state.room.minWeight
+        ) {
+            return {
+                ok: false,
+                message: "Bạn không thể chọn vì không đạt điều kiện cân nặng của phòng.",
+            };
+        }
+
+        if (
+            state.room.maxWeight !== null &&
+            pet.weight > state.room.maxWeight
+        ) {
+            return {
+                ok: false,
+                message: "Bạn không thể chọn vì không đạt điều kiện cân nặng của phòng.",
             };
         }
 
@@ -660,6 +832,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 ? pet.roomMessage
                 : "Chọn bé để kiểm tra điều kiện phòng.";
             serviceButton.disabled = true;
+            clearRoomMessage();
             updateSummary();
             return;
         }
@@ -676,6 +849,7 @@ document.addEventListener("DOMContentLoaded", function () {
             checkbox.checked = false;
             status.textContent = eligibility.message;
             serviceButton.disabled = true;
+            showRoomMessage(eligibility.message);
             updateSummary();
             return;
         }
@@ -686,6 +860,7 @@ document.addEventListener("DOMContentLoaded", function () {
         checkbox.checked = true;
         status.textContent = eligibility.message;
         serviceButton.disabled = false;
+        clearRoomMessage();
         updateSummary();
     }
 
@@ -703,6 +878,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         : "Chọn bé để kiểm tra điều kiện phòng.";
             }
         });
+        clearRoomMessage();
     }
 
     function setModalOpen(modal, isOpen) {
@@ -1017,4 +1193,5 @@ document.addEventListener("DOMContentLoaded", function () {
     closeModals();
     syncDateInputs();
     updateSummary();
+    fetchRoomTypeAvailability();
 });

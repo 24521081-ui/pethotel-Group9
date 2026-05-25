@@ -2,18 +2,22 @@
 
 namespace App\Repositories\Eloquent;
 
+use App\Models\AuditLog;
 use App\Models\Booking;
 use App\Models\BookingRoom;
 use App\Models\BookingRoomPet;
 use App\Models\BookingServicePet;
-use App\Models\Branch;
 use App\Models\Customer;
+use App\Models\Order;
+use App\Models\OrderDetail;
+use App\Models\Payment;
 use App\Models\Pet;
 use App\Models\Room;
 use App\Models\Service;
 use App\Models\TypeRoom;
 use App\Models\User;
 use App\Repositories\Contracts\BookingRepositoryInterface;
+use App\Services\PublicBranchService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Database\QueryException;
@@ -24,6 +28,14 @@ use Throwable;
 
 class BookingRepository implements BookingRepositoryInterface
 {
+    private const ROOM_HOLDING_STATUSES = [
+        'PENDING',
+        'PENDING_PAYMENT',
+        'HOLDING',
+        'CONFIRMED',
+        'CHECKED_IN',
+    ];
+
     public function customerForUser(?User $user): ?Customer
     {
         if (! $user) {
@@ -36,7 +48,11 @@ class BookingRepository implements BookingRepositoryInterface
     public function bookingFormViewData(string $branchId, bool $isAuthenticated, ?User $user = null): array
     {
         $branches = $this->bookingBranches();
-        $selectedBranch = collect($branches)->firstWhere('id', $branchId) ?: $branches[0];
+        abort_if($branches === [], 404);
+
+        $selectedBranch = collect($branches)
+            ->first(fn (array $branch): bool => (string) $branch['id'] === (string) $branchId)
+            ?: $branches[0];
 
         return [
             'id' => $selectedBranch['id'],
@@ -48,6 +64,7 @@ class BookingRepository implements BookingRepositoryInterface
                 'branch' => $selectedBranch,
                 'branches' => $branches,
                 'roomTypes' => $this->bookingRoomTypes((string) $selectedBranch['id']),
+                'roomTypeAvailabilityUrl' => url('/api/booking/branch/'.$selectedBranch['id'].'/room-types/availability'),
                 'pets' => $this->customerPets($this->customerForUser($user)),
                 'services' => $this->bookingServices(),
                 'availability' => $this->bookingAvailability((string) $selectedBranch['id']),
@@ -57,82 +74,83 @@ class BookingRepository implements BookingRepositoryInterface
 
     public function bookingBranches(): array
     {
-        $branches = Branch::where('is_active', 1)
-            ->orderBy('branch_name')
-            ->get();
-
-        if ($branches->isEmpty()) {
-            return $this->fallbackBranches();
-        }
-
-        $branchImages = $this->randomBranchImages($branches->count());
-
-        return $branches
+        return app(PublicBranchService::class)
+            ->branches()
             ->values()
-            ->map(fn (Branch $branch, int $index): array => [
-                'id' => (string) $branch->branch_id,
-                'name' => $branch->branch_name,
-                'address' => $branch->address,
-                'phone' => $branch->phone ?: 'Đang cập nhật',
-                'hours' => '8:00 - 20:00',
-                'rating' => '4.8',
-                'reviews' => 0,
-                'image' => $branchImages[$index] ?? asset('assets/client/images/right-home-500x554.png'),
-                'bookingUrl' => url('/booking/branch/'.$branch->branch_id),
-            ])
             ->all();
     }
 
-    private function fallbackBranches(): array
-    {
-        $branchImages = $this->randomBranchImages(4);
+    public function getRoomTypeAvailability(
+        string|int $branchId,
+        ?string $checkIn = null,
+        ?string $checkOut = null
+    ): array {
+        $hasDateRange = filled($checkIn) && filled($checkOut);
+        $busyRoomIds = $hasDateRange
+            ? $this->busyRoomIdsForDateRange($branchId, (string) $checkIn, (string) $checkOut)
+            : collect();
 
-        return [
-            [
-                'id' => '1',
-                'name' => 'Pet Hotel Quận 7',
-                'address' => '123 Đường Nguyễn Văn Linh, Quận 7, TP.HCM',
-                'phone' => '1900 1234',
-                'hours' => '8:00 - 20:00',
-                'rating' => '4.8',
-                'reviews' => 127,
-                'image' => $branchImages[0],
-                'bookingUrl' => url('/booking/branch/1'),
-            ],
-            [
-                'id' => '2',
-                'name' => 'Pet Hotel Quận 1',
-                'address' => '45 Đường Lê Lợi, Quận 1, TP.HCM',
-                'phone' => '1900 5678',
-                'hours' => '7:30 - 21:00',
-                'rating' => '4.6',
-                'reviews' => 89,
-                'image' => $branchImages[1],
-                'bookingUrl' => url('/booking/branch/2'),
-            ],
-            [
-                'id' => '3',
-                'name' => 'Pet Hotel Bình Thạnh',
-                'address' => '321 Đường Xô Viết Nghệ Tĩnh, Bình Thạnh, TP.HCM',
-                'phone' => '1900 3456',
-                'hours' => '8:00 - 20:00',
-                'rating' => '4.7',
-                'reviews' => 203,
-                'image' => $branchImages[2],
-                'bookingUrl' => url('/booking/branch/3'),
-            ],
-            [
-                'id' => '4',
-                'name' => 'Pet Hotel Thủ Đức',
-                'address' => '789 Đường Võ Văn Ngân, TP. Thủ Đức, TP.HCM',
-                'phone' => '1900 9012',
-                'hours' => '8:00 - 19:00',
-                'rating' => '4.5',
-                'reviews' => 61,
-                'image' => $branchImages[3],
-                'bookingUrl' => url('/booking/branch/4'),
-            ],
-        ];
+        return TypeRoom::where('is_active', 1)
+            ->whereHas('rooms', fn ($query) => $query->where('branch_id', $branchId))
+            ->orderBy('base_price_per_day')
+            ->get()
+            ->map(function (TypeRoom $typeRoom) use ($branchId, $busyRoomIds, $hasDateRange): array {
+                $roomQuery = Room::where('branch_id', $branchId)
+                    ->where('type_room_id', $typeRoom->type_room_id);
+
+                $totalRooms = (clone $roomQuery)->count();
+
+                $availableRoomsQuery = (clone $roomQuery);
+
+                if ($hasDateRange) {
+                    $availableRoomsQuery->where('status', '<>', 'MAINTENANCE');
+                } else {
+                    $availableRoomsQuery->where('status', 'AVAILABLE');
+                }
+
+                if ($hasDateRange && $busyRoomIds->isNotEmpty()) {
+                    $availableRoomsQuery->whereNotIn('room_id', $busyRoomIds->all());
+                }
+
+                $availableRooms = $availableRoomsQuery->count();
+                $maxPets = max(1, (int) $typeRoom->max_slot);
+                $minWeight = $typeRoom->pet_weight_min_kg !== null
+                    ? (float) $typeRoom->pet_weight_min_kg
+                    : null;
+                $maxWeight = $typeRoom->pet_weight_max_kg !== null
+                    ? (float) $typeRoom->pet_weight_max_kg
+                    : null;
+
+                return [
+                    'id' => (string) $typeRoom->type_room_id,
+                    'type_room_id' => (int) $typeRoom->type_room_id,
+                    'branch_id' => (int) $branchId,
+                    'name' => $typeRoom->type_name,
+                    'description' => $typeRoom->notes,
+                    'detail' => $typeRoom->notes ?: sprintf(
+                        'Phòng %s với sức chứa tối đa %d thú cưng.',
+                        $typeRoom->type_name,
+                        $maxPets
+                    ),
+                    'price' => (float) $typeRoom->base_price_per_day,
+                    'max_pets' => $maxPets,
+                    'maxPets' => $maxPets,
+                    'min_weight' => $minWeight,
+                    'minWeight' => $minWeight,
+                    'max_weight' => $maxWeight,
+                    'maxWeight' => $maxWeight,
+                    'total_rooms' => $totalRooms,
+                    'totalRooms' => $totalRooms,
+                    'available_rooms' => $availableRooms,
+                    'availableRooms' => $availableRooms,
+                    'availableRoomsCount' => $availableRooms,
+                    'availabilityText' => 'Còn '.$availableRooms.' phòng',
+                    'iconClass' => $this->roomIconClass($typeRoom),
+                    'is_sold_out' => $availableRooms === 0,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     public function bookingHistoryItems(Customer $customer): array
@@ -174,7 +192,7 @@ class BookingRepository implements BookingRepositoryInterface
             'pets' => $this->bookingPetsFor($booking),
             'services' => $this->bookingServicesFor($booking),
             'total_amount' => $this->bookingTotalAmount($booking),
-            'note' => $booking->special_notes ?? $booking->special_note ?? null,
+            'note' => $booking->special_notes ?? null,
         ];
     }
 
@@ -182,7 +200,7 @@ class BookingRepository implements BookingRepositoryInterface
     {
         return Room::where('branch_id', $branchId)
             ->where('type_room_id', $typeRoomId)
-            ->where('status', 'AVAILABLE')
+            ->where('status', '<>', 'MAINTENANCE')
             ->exists();
     }
 
@@ -194,21 +212,13 @@ class BookingRepository implements BookingRepositoryInterface
     ): bool {
         $checkinDate = Carbon::parse($checkin)->startOfDay();
         $checkoutDate = Carbon::parse($checkout)->startOfDay();
-        $unavailableDates = collect($this->fullyBookedDatesForType($branchId, $typeRoomId))
-            ->mapWithKeys(fn (string $date): array => [$date => true]);
         $today = Carbon::today();
 
         if ($checkinDate->lt($today) || $checkoutDate->lte($checkinDate)) {
             return false;
         }
 
-        for ($date = $checkinDate->copy(); $date->lt($checkoutDate); $date->addDay()) {
-            if ($date->lt($today) || $unavailableDates->has($date->toDateString())) {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->availableRoomCountForType($branchId, $typeRoomId, $checkin, $checkout) > 0;
     }
 
     public function petsCanBeBookedBy(?User $user, array $petIds): bool
@@ -270,7 +280,7 @@ class BookingRepository implements BookingRepositoryInterface
             ->join('booking', 'booking_room.booking_id', '=', 'booking.booking_id')
             ->join('pet', 'booking_room_pet.pet_id', '=', 'pet.pet_id')
             ->whereIn('booking_room_pet.pet_id', $uniquePetIds->all())
-            ->whereIn('booking.status', ['PENDING', 'CONFIRMED', 'CHECKED_IN'])
+            ->whereIn('booking.status', self::ROOM_HOLDING_STATUSES)
             ->where('booking.checkin_expected_at', '<', $checkoutAt->toDateTimeString())
             ->where('booking.checkout_expected_at', '>', $checkinAt->toDateTimeString())
             ->select([
@@ -346,6 +356,7 @@ class BookingRepository implements BookingRepositoryInterface
             ...$bookingData,
             'customer_id' => $customer->customer_id,
             'employee_id' => null,
+            'user_id' => $user->id,
         ]);
     }
 
@@ -367,9 +378,9 @@ class BookingRepository implements BookingRepositoryInterface
 
                 $room = Room::where('branch_id', $data['branch_id'])
                     ->where('type_room_id', $data['room_type'])
-                    ->where('status', 'AVAILABLE')
+                    ->where('status', '<>', 'MAINTENANCE')
                     ->whereDoesntHave('bookingRooms.booking', function ($query) use ($data): void {
-                        $query->whereIn('status', ['PENDING', 'CONFIRMED', 'CHECKED_IN'])
+                        $query->whereIn('status', self::ROOM_HOLDING_STATUSES)
                             ->where('checkin_expected_at', '<', $data['checkout_expected_at'])
                             ->where('checkout_expected_at', '>', $data['checkin_expected_at']);
                     })
@@ -382,6 +393,7 @@ class BookingRepository implements BookingRepositoryInterface
                 }
 
                 $this->assertPetsFitRoomType($pets, $room);
+                $this->holdRoomForPendingBooking($room);
 
                 $booking = Booking::create([
                     'customer_id' => $data['customer_id'],
@@ -436,6 +448,12 @@ class BookingRepository implements BookingRepositoryInterface
                     'total_amount' => $this->estimatedBookingTotal($room, $booking, $serviceTotal),
                 ]);
 
+                $this->createPendingOrderAndPayment(
+                    $booking->fresh($this->bookingRelations()),
+                    $data['user_id'] ?? null
+                );
+                $this->writeBookingAuditLog($booking, $data['user_id'] ?? null);
+
                 return $booking->load($this->bookingRelations());
             } catch (QueryException $e) {
                 Log::error('Database Error in Booking: '.$e->getMessage(), [
@@ -470,22 +488,34 @@ class BookingRepository implements BookingRepositoryInterface
         $minWeight = $typeRoom->pet_weight_min_kg !== null ? (float) $typeRoom->pet_weight_min_kg : null;
         $maxWeight = $typeRoom->pet_weight_max_kg !== null ? (float) $typeRoom->pet_weight_max_kg : null;
 
+        $missingWeightPets = $pets
+            ->filter(fn (Pet $pet): bool => $pet->weight_kg === null)
+            ->map(fn (Pet $pet): string => $pet->pet_name ?: 'Thú cưng #'.$pet->pet_id)
+            ->values();
+
+        if ($missingWeightPets->isNotEmpty()) {
+            throw new Exception(sprintf(
+                'pet_ids|%s chưa có thông tin cân nặng, vui lòng cập nhật trước khi chọn phòng.',
+                $missingWeightPets->implode(', ')
+            ));
+        }
+
         if ($minWeight === null && $maxWeight === null) {
             return;
         }
 
         $invalidPets = $pets
             ->filter(function (Pet $pet) use ($minWeight, $maxWeight): bool {
-                if ($pet->weight_kg === null) {
-                    return false;
-                }
-
                 $weight = (float) $pet->weight_kg;
 
                 return ($minWeight !== null && $weight < $minWeight)
                     || ($maxWeight !== null && $weight > $maxWeight);
             })
-            ->map(fn (Pet $pet): string => sprintf('%s (%skg)', $pet->pet_name ?: 'Thú cưng #'.$pet->pet_id, (float) $pet->weight_kg))
+            ->map(fn (Pet $pet): string => sprintf(
+                '%s (%s)',
+                $pet->pet_name ?: 'Thú cưng #'.$pet->pet_id,
+                $pet->weight_kg === null ? 'chưa có cân nặng' : ((float) $pet->weight_kg).'kg'
+            ))
             ->values();
 
         if ($invalidPets->isEmpty()) {
@@ -504,6 +534,164 @@ class BookingRepository implements BookingRepositoryInterface
             $typeRoom->type_name ?: 'đã chọn',
             $weightRange
         ));
+    }
+
+    private function holdRoomForPendingBooking(Room $room): void
+    {
+        if ($room->status === 'MAINTENANCE') {
+            throw new Exception('room_type|Phòng đang bảo trì, vui lòng chọn phòng khác.');
+        }
+
+        if ($room->status !== 'IN_USE') {
+            $room->update(['status' => 'IN_USE']);
+        }
+    }
+
+    private function createPendingOrderAndPayment(Booking $booking, ?int $userId): Order
+    {
+        $existingOrder = Order::where('booking_id', $booking->booking_id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($existingOrder) {
+            if (! in_array((string) $existingOrder->status, ['COMPLETED', 'PAID'], true)
+                && ! $existingOrder->details()->exists()) {
+                $subtotal = $this->createOrderDetailsForBooking($existingOrder, $booking);
+
+                $existingOrder->update([
+                    'subtotal' => $subtotal,
+                    'grand_total' => max(0, round($subtotal - (float) $existingOrder->discount_amount, 2)),
+                ]);
+
+                $booking->update(['total_amount' => $subtotal]);
+            }
+
+            $this->ensurePendingPaymentForOrder($existingOrder);
+
+            return $existingOrder->load(['details', 'payment']);
+        }
+
+        $order = Order::create([
+            'customer_id' => $booking->customer_id,
+            'branch_id' => $booking->branch_id,
+            'booking_id' => $booking->booking_id,
+            'created_by_emp' => null,
+            'created_by_user_id' => $userId ?? $booking->customer?->user_id,
+            'coupon_id' => null,
+            'payment_method' => 'CASH',
+            'status' => 'PENDING',
+            'subtotal' => 0,
+            'discount_amount' => 0,
+            'grand_total' => 0,
+            'paid_at' => null,
+            'customer_name' => $booking->customer?->full_name ?: $booking->customer?->user?->name,
+            'customer_phone' => $booking->customer?->phone,
+            'customer_email' => $booking->customer?->user?->email,
+        ]);
+
+        $subtotal = $this->createOrderDetailsForBooking($order, $booking);
+
+        $order->update([
+            'subtotal' => $subtotal,
+            'grand_total' => $subtotal,
+        ]);
+
+        $booking->update(['total_amount' => $subtotal]);
+        $this->ensurePendingPaymentForOrder($order);
+
+        return $order->load(['details', 'payment']);
+    }
+
+    private function createOrderDetailsForBooking(Order $order, Booking $booking): float
+    {
+        if ($order->details()->exists()) {
+            return (float) $order->details()->sum('line_total');
+        }
+
+        $subtotal = 0.0;
+        $nights = max(1, $this->bookingNights($booking));
+
+        foreach ($booking->bookingRooms as $bookingRoom) {
+            $room = $bookingRoom->room;
+            $typeRoom = $room?->typeRoom;
+            $unitPrice = (float) ($typeRoom?->base_price_per_day ?? 0);
+            $lineTotal = round($unitPrice * $nights, 2);
+
+            OrderDetail::create([
+                'order_id' => $order->order_id,
+                'booking_room_id' => $bookingRoom->booking_room_id,
+                'booking_service_pet_id' => null,
+                'title' => sprintf(
+                    'Phong %s (%d dem)',
+                    $typeRoom?->type_name ?: $room?->room_number ?: 'da dat',
+                    $nights
+                ),
+                'quantity' => $nights,
+                'unit_price' => $unitPrice,
+                'line_total' => $lineTotal,
+            ]);
+
+            $subtotal += $lineTotal;
+        }
+
+        foreach ($booking->bookingServicePets as $bookingServicePet) {
+            $service = $bookingServicePet->service;
+            $petName = $bookingServicePet->pet?->pet_name;
+            $unitPrice = (float) ($service?->base_price ?? 0);
+
+            OrderDetail::create([
+                'order_id' => $order->order_id,
+                'booking_room_id' => null,
+                'booking_service_pet_id' => $bookingServicePet->booking_service_pet_id,
+                'title' => trim(($service?->service_name ?: 'Dich vu') . ($petName ? ' - '.$petName : '')),
+                'quantity' => 1,
+                'unit_price' => $unitPrice,
+                'line_total' => $unitPrice,
+            ]);
+
+            $subtotal += $unitPrice;
+        }
+
+        return round($subtotal, 2);
+    }
+
+    private function ensurePendingPaymentForOrder(Order $order): void
+    {
+        $amount = (float) $order->grand_total;
+
+        if ($amount <= 0 || in_array((string) $order->status, ['COMPLETED', 'PAID', 'CANCELLED', 'REFUNDED'], true)) {
+            return;
+        }
+
+        Payment::updateOrCreate(
+            ['order_id' => $order->order_id],
+            [
+                'payment_method' => $order->payment_method,
+                'provider' => 'Quay thu ngan',
+                'amount' => $amount,
+                'status' => 'PENDING',
+                'paid_at' => null,
+                'note' => 'Cho thanh toan booking #'.$order->booking_id.'.',
+            ]
+        );
+    }
+
+    private function writeBookingAuditLog(Booking $booking, ?int $userId): void
+    {
+        try {
+            AuditLog::create([
+                'table_name' => 'booking',
+                'action_type' => 'INSERT',
+                'row_pk' => (string) $booking->booking_id,
+                'detail_text' => 'Customer booking created with pending payment order.',
+                'changed_by_user_id' => $userId,
+                'changed_at' => now(),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('Unable to write booking audit log: '.$e->getMessage(), [
+                'booking_id' => $booking->booking_id,
+            ]);
+        }
     }
 
     private function bookingRelations(): array
@@ -698,38 +886,7 @@ class BookingRepository implements BookingRepositoryInterface
 
     private function bookingRoomTypes(string $branchId): array
     {
-        return TypeRoom::where('is_active', 1)
-            ->orderBy('base_price_per_day')
-            ->get()
-            ->map(function (TypeRoom $typeRoom) use ($branchId): array {
-                $availableRoomsCount = Room::where('branch_id', $branchId)
-                    ->where('type_room_id', $typeRoom->type_room_id)
-                    ->where('status', 'AVAILABLE')
-                    ->count();
-
-                $maxPets = max(1, (int) $typeRoom->max_slot);
-                $maxWeight = $typeRoom->pet_weight_max_kg !== null
-                    ? (float) $typeRoom->pet_weight_max_kg
-                    : 0.0;
-
-                return [
-                    'id' => (string) $typeRoom->type_room_id,
-                    'name' => $typeRoom->type_name,
-                    'price' => (float) $typeRoom->base_price_per_day,
-                    'iconClass' => $this->roomIconClass($typeRoom),
-                    'maxPets' => $maxPets,
-                    'maxWeight' => $maxWeight,
-                    'availableRoomsCount' => $availableRoomsCount,
-                    'is_sold_out' => $availableRoomsCount === 0,
-                    'detail' => $typeRoom->notes ?: sprintf(
-                        'Phòng %s với sức chứa tối đa %d thú cưng.',
-                        $typeRoom->type_name,
-                        $maxPets
-                    ),
-                ];
-            })
-            ->values()
-            ->all();
+        return $this->getRoomTypeAvailability($branchId);
     }
 
     private function bookingServices(): array
@@ -763,10 +920,44 @@ class BookingRepository implements BookingRepositoryInterface
             ->all();
     }
 
+    private function busyRoomIdsForDateRange(string|int $branchId, string $checkIn, string $checkOut)
+    {
+        $checkInAt = Carbon::parse($checkIn)->startOfDay();
+        $checkOutAt = Carbon::parse($checkOut)->startOfDay();
+
+        return BookingRoom::query()
+            ->whereHas('booking', function ($query) use ($branchId, $checkInAt, $checkOutAt): void {
+                $query->where('branch_id', $branchId)
+                    ->whereIn('status', self::ROOM_HOLDING_STATUSES)
+                    ->where('checkin_expected_at', '<', $checkOutAt)
+                    ->where('checkout_expected_at', '>', $checkInAt);
+            })
+            ->whereHas('room', fn ($query) => $query->where('branch_id', $branchId))
+            ->pluck('room_id')
+            ->unique()
+            ->values();
+    }
+
+    private function availableRoomCountForType(
+        string|int $branchId,
+        string|int $typeRoomId,
+        string $checkIn,
+        string $checkOut
+    ): int {
+        $busyRoomIds = $this->busyRoomIdsForDateRange($branchId, $checkIn, $checkOut);
+
+        return Room::where('branch_id', $branchId)
+            ->where('type_room_id', $typeRoomId)
+            ->where('status', '<>', 'MAINTENANCE')
+            ->when($busyRoomIds->isNotEmpty(), fn ($query) => $query->whereNotIn('room_id', $busyRoomIds->all()))
+            ->count();
+    }
+
     private function fullyBookedDatesForType(string|int $branchId, string|int $typeRoomId): array
     {
         $totalPhysicalRooms = Room::where('branch_id', $branchId)
             ->where('type_room_id', $typeRoomId)
+            ->where('status', '<>', 'MAINTENANCE')
             ->count();
 
         if ($totalPhysicalRooms === 0) {
@@ -781,7 +972,7 @@ class BookingRepository implements BookingRepositoryInterface
             ->join('room', 'booking_room.room_id', '=', 'room.room_id')
             ->where('room.branch_id', $branchId)
             ->where('room.type_room_id', $typeRoomId)
-            ->whereIn('booking.status', ['PENDING', 'CONFIRMED', 'CHECKED_IN'])
+            ->whereIn('booking.status', self::ROOM_HOLDING_STATUSES)
             ->whereDate('booking.checkout_expected_at', '>=', $today->toDateString())
             ->select(['booking_room.room_id', 'booking.checkin_expected_at', 'booking.checkout_expected_at'])
             ->get();
@@ -827,7 +1018,7 @@ class BookingRepository implements BookingRepositoryInterface
                     'species' => $this->displaySpecies($pet->species),
                     'breed' => $pet->breed ?: 'Chưa cập nhật',
                     'sex' => $this->displaySex($pet->sex),
-                    'weight' => (float) ($pet->weight_kg ?: 0),
+                    'weight' => $pet->weight_kg !== null ? (float) $pet->weight_kg : null,
                     'is_in_room' => $this->petIsCurrentlyInRoom($pet),
                     'room_status_message' => 'Thú cưng này đang ở trong phòng khác.',
                     'note' => $pet->special_notes ?: 'Không có ghi chú đặc biệt',
@@ -848,59 +1039,6 @@ class BookingRepository implements BookingRepositoryInterface
             ->where('booking.status', 'CHECKED_IN')
             ->whereNull('booking.checkout_actual_at')
             ->exists();
-    }
-
-    private function randomBranchImages(int $count): array
-    {
-        if ($count <= 0) {
-            return [];
-        }
-
-        $images = $this->branchImageUrls();
-
-        if ($images === []) {
-            return array_fill(0, $count, asset('assets/client/images/right-home-500x554.png'));
-        }
-
-        shuffle($images);
-
-        return collect(range(0, max(0, $count - 1)))
-            ->map(fn (int $index): string => $images[$index % count($images)])
-            ->all();
-    }
-
-    private function branchImageUrls(): array
-    {
-        static $urls = null;
-
-        if ($urls !== null) {
-            return $urls;
-        }
-
-        $directory = public_path('assets/client/images/branches');
-
-        if (! is_dir($directory)) {
-            return $urls = [];
-        }
-
-        $files = [];
-
-        foreach (['jpg', 'jpeg', 'png', 'webp'] as $extension) {
-            $files = [
-                ...$files,
-                ...(glob($directory.DIRECTORY_SEPARATOR.'*.'.$extension) ?: []),
-                ...(glob($directory.DIRECTORY_SEPARATOR.'*.'.strtoupper($extension)) ?: []),
-            ];
-        }
-
-        $files = array_values(array_unique($files));
-        usort($files, 'strnatcasecmp');
-
-        return $urls = collect($files)
-            ->take(10)
-            ->map(fn (string $path): string => asset('assets/client/images/branches/'.rawurlencode(basename($path))))
-            ->values()
-            ->all();
     }
 
     private function roomIconClass(TypeRoom $typeRoom): string
@@ -948,9 +1086,7 @@ class BookingRepository implements BookingRepositoryInterface
         return match (strtoupper((string) $species)) {
             'DOG' => 'Chó',
             'CAT' => 'Mèo',
-            'BIRD' => 'Chim',
-            'RABBIT' => 'Thỏ',
-            default => 'Khác',
+            default => 'Khác', 
         };
     }
 

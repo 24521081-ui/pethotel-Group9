@@ -10,7 +10,6 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class PetController extends WebController
@@ -73,33 +72,12 @@ class PetController extends WebController
             'species' => $validated['species'],
             'breed' => $validated['breed'] ?? null,
             'weight_kg' => $validated['weight_kg'] ?? null,
+            'special_notes' => $validated['special_notes'] ?? null,
+            'sex' => $validated['gender'] ?? 'UNKNOWN',
         ];
 
-        if (Schema::hasColumn('pet', 'special_notes')) {
-            $petData['special_notes'] = $validated['special_notes'] ?? null;
-        }
-
-        if (Schema::hasColumn('pet', 'special_note')) {
-            $petData['special_note'] = $validated['special_notes'] ?? null;
-        }
-
-        if (Schema::hasColumn('pet', 'sex')) {
-            $petData['sex'] = $validated['gender'] ?? 'UNKNOWN';
-        }
-
-        if (Schema::hasColumn('pet', 'gender')) {
-            $petData['gender'] = $validated['gender'] ?? 'UNKNOWN';
-        }
-
         if ($request->hasFile('pet_image')) {
-            $imagePath = $request->file('pet_image')->store('pets', 'public');
-
-            foreach (['pet_image_url', 'pet_image', 'image_url', 'avatar_url'] as $imageColumn) {
-                if (Schema::hasColumn('pet', $imageColumn)) {
-                    $petData[$imageColumn] = $imagePath;
-                    break;
-                }
-            }
+            $petData['pet_image'] = $request->file('pet_image')->store('pets', 'public');
         }
 
         Pet::create($petData);
@@ -189,31 +167,12 @@ class PetController extends WebController
             'species' => $validated['species'],
             'breed' => $validated['breed'] ?? null,
             'weight_kg' => $validated['weight_kg'] ?? null,
+            'special_notes' => $validated['special_notes'] ?? null,
+            'sex' => $validated['gender'] ?? 'UNKNOWN',
         ];
 
-        if (Schema::hasColumn('pet', 'special_notes')) {
-            $petData['special_notes'] = $validated['special_notes'] ?? null;
-        }
-
-        if (Schema::hasColumn('pet', 'special_note')) {
-            $petData['special_note'] = $validated['special_notes'] ?? null;
-        }
-
-        if (Schema::hasColumn('pet', 'sex')) {
-            $petData['sex'] = $validated['gender'] ?? 'UNKNOWN';
-        }
-
-        if (Schema::hasColumn('pet', 'gender')) {
-            $petData['gender'] = $validated['gender'] ?? 'UNKNOWN';
-        }
-
         if ($request->hasFile('pet_image')) {
-            foreach (['pet_image_url', 'pet_image', 'image_url', 'avatar_url'] as $imageColumn) {
-                if (Schema::hasColumn('pet', $imageColumn)) {
-                    $petData[$imageColumn] = $request->file('pet_image')->store('pets', 'public');
-                    break;
-                }
-            }
+            $petData['pet_image'] = $request->file('pet_image')->store('pets', 'public');
         }
 
         $pet->update($petData);

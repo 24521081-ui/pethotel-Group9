@@ -11,24 +11,16 @@
             <p>Chọn chi nhánh bạn muốn đặt phòng</p>
         </div>
 
-        <div class="booking-branch-list">
-            @foreach ($branches as $branch)
-                <a href="{{ $branch['bookingUrl'] }}" class="booking-branch-option">
-                    <img src="{{ $branch['image'] }}" alt="{{ $branch['name'] }}">
-
-                    <span class="booking-branch-copy">
-                        <strong>{{ $branch['name'] }}</strong>
-                        <span><i class="fa-solid fa-location-dot"></i> {{ $branch['address'] }}</span>
-                        <span class="booking-branch-rating">
-                            <i class="fa-solid fa-star"></i>
-                            {{ $branch['rating'] }}
-                            <small>({{ $branch['reviews'] }} đánh giá)</small>
-                        </span>
-                    </span>
-
-                    <i class="fa-solid fa-chevron-right booking-branch-arrow"></i>
-                </a>
-            @endforeach
+        <div class="booking-branch-list branch-list">
+            @forelse ($branches as $branch)
+                <x-branch-card :branch="$branch" />
+            @empty
+                <div class="branch-empty">
+                    <i class="fa-regular fa-map"></i>
+                    <h3>Chưa có chi nhánh đang hoạt động</h3>
+                    <p>Vui lòng quay lại sau hoặc liên hệ Pet Hotel để được hỗ trợ.</p>
+                </div>
+            @endforelse
         </div>
     </div>
 </section>

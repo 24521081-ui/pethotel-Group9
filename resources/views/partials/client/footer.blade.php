@@ -54,9 +54,12 @@
 
     <div class="footer-column">
       <h2 class="footer-col-title">Đối tác</h2>
-      <button class="footer-partner-btn" type="button">Pedigree</button>
-      <button class="footer-partner-btn" type="button">Royal Canin</button>
-      <button class="footer-partner-btn" type="button">Whiskas</button>
+      <a href="https://www.pedigree.com/" class="footer-partner-link" target="_blank"
+        rel="noopener noreferrer">Pedigree</a>
+      <a href="https://www.royalcanin.com/vn" class="footer-partner-link" target="_blank"
+        rel="noopener noreferrer">Royal Canin</a>
+      <a href="https://www.whiskas.com.vn" class="footer-partner-link" target="_blank"
+        rel="noopener noreferrer">Whiskas</a>
     </div>
 
     <div class="footer-column">

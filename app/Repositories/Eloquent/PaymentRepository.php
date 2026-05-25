@@ -9,6 +9,7 @@ use App\Models\BookingServicePet;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderDetail;
+use App\Models\Payment;
 use App\Models\User;
 use App\Repositories\Contracts\PaymentRepositoryInterface;
 use Carbon\Carbon;
@@ -52,11 +53,25 @@ class PaymentRepository implements PaymentRepositoryInterface
         $contact = $this->normalizeContact($contact);
 
         return DB::transaction(function () use ($booking, $order, $databasePaymentMethod, $couponCode, $contact, $user): Booking {
+            $booking = Booking::where('booking_id', $booking->booking_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $order = Order::where('order_id', $order->order_id)
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if (in_array($order->status, ['COMPLETED', 'CANCELLED', 'REFUNDED'], true)) {
+            if (in_array($order->status, ['COMPLETED', 'PAID'], true)) {
+                $this->ensureSuccessfulPaymentForOrder(
+                    $order,
+                    (string) ($order->payment_method ?: $databasePaymentMethod),
+                    'Dong bo thanh toan booking #'.$booking->booking_id.' da hoan tat.'
+                );
+
+                return $booking->fresh(['orders.payment']);
+            }
+
+            if (in_array($order->status, ['CANCELLED', 'REFUNDED'], true)) {
                 return $booking->fresh();
             }
 
@@ -75,6 +90,12 @@ class PaymentRepository implements PaymentRepositoryInterface
                 'paid_at' => now(),
             ]);
 
+            $this->ensureSuccessfulPaymentForOrder(
+                $order,
+                $databasePaymentMethod,
+                'Thanh toan booking #'.$booking->booking_id.' thanh cong.'
+            );
+
             $this->fillMissingCustomerContact($user, $contact);
 
             if ($coupon) {
@@ -84,7 +105,7 @@ class PaymentRepository implements PaymentRepositoryInterface
                     'booking_id' => $booking->booking_id,
                     'coupon_id' => $coupon->coupon_id,
                     'applied_at' => now(),
-                    'notes' => 'Ap dung ma giam gia '.$coupon->coupon_code.' khi thanh toan.',
+                    'notes' => 'Áp dụng mã giảm giá '.$coupon->coupon_code.' khi thanh toán.',
                 ]);
             }
 
@@ -95,7 +116,9 @@ class PaymentRepository implements PaymentRepositoryInterface
                 ]);
             }
 
-            return $booking->fresh('orders');
+            $this->syncBookingRoomStatus($booking, 'IN_USE');
+
+            return $booking->fresh(['orders.payment']);
         });
     }
 
@@ -111,13 +134,13 @@ class PaymentRepository implements PaymentRepositoryInterface
         $couponCode = $this->normalizeCouponCode($couponCode);
 
         if (! $couponCode) {
-            return $this->couponPreviewData($order, null, 0.0, 'Nhap ma giam gia de ap dung.');
+            return $this->couponPreviewData($order, null, 0.0, 'Nhập mã giảm giá để áp dụng.');
         }
 
         $coupon = $this->validCouponForOrder($couponCode, $order, false);
         $discountAmount = $this->discountAmountFor($coupon, (float) $order->subtotal);
 
-        return $this->couponPreviewData($order, $coupon, $discountAmount, 'Ma giam gia da duoc ap dung.');
+        return $this->couponPreviewData($order, $coupon, $discountAmount, 'Mã giảm giá đã được áp dụng.');
     }
 
     public function orderStatusForUser(?User $user, string $bookingId): ?array
@@ -159,13 +182,31 @@ class PaymentRepository implements PaymentRepositoryInterface
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $hasCompletedOrder = Order::where('booking_id', $booking->booking_id)
+                ->whereIn('status', ['COMPLETED', 'PAID'])
+                ->exists();
+
+            if ($hasCompletedOrder) {
+                return $booking->fresh($this->bookingRelations());
+            }
+
             Order::where('booking_id', $booking->booking_id)
                 ->whereIn('status', ['PENDING', 'PROCESSING'])
                 ->update(['status' => 'CANCELLED']);
 
+            Payment::whereHas('order', fn ($query) => $query->where('booking_id', $booking->booking_id))
+                ->where('status', 'PENDING')
+                ->update([
+                    'status' => 'FAILED',
+                    'paid_at' => null,
+                    'note' => 'Thanh toan booking #'.$booking->booking_id.' da huy.',
+                ]);
+
             if (in_array($booking->status, ['PENDING', 'CONFIRMED'], true)) {
                 $booking->update(['status' => 'CANCELLED']);
             }
+
+            $this->releaseRoomsForCancelledBooking($booking);
 
             return $booking->fresh($this->bookingRelations());
         });
@@ -207,6 +248,12 @@ class PaymentRepository implements PaymentRepositoryInterface
 
                 if ($existingOrder) {
                     if (! $existingOrder->details()->exists()) {
+                        if (in_array((string) $existingOrder->status, ['COMPLETED', 'PAID'], true)) {
+                            throw ValidationException::withMessages([
+                                'payment' => 'Hoa don da hoan tat nhung thieu chi tiet don hang. Vui long lien he nhan vien ho tro.',
+                            ]);
+                        }
+
                         $subtotal = $this->createOrderDetails($existingOrder, $booking);
 
                         $existingOrder->update([
@@ -216,6 +263,8 @@ class PaymentRepository implements PaymentRepositoryInterface
 
                         $booking->update(['total_amount' => $subtotal]);
                     }
+
+                    $this->ensurePendingPaymentForOrder($existingOrder);
 
                     return $existingOrder->load($this->orderRelations());
                 }
@@ -243,6 +292,7 @@ class PaymentRepository implements PaymentRepositoryInterface
                 ]);
 
                 $booking->update(['total_amount' => $subtotal]);
+                $this->ensurePendingPaymentForOrder($order);
 
                 return $order->load($this->orderRelations());
             });
@@ -583,6 +633,111 @@ class PaymentRepository implements PaymentRepositoryInterface
         };
     }
 
+    private function ensurePendingPaymentForOrder(Order $order): void
+    {
+        $amount = (float) $order->grand_total;
+
+        if ($amount <= 0 || in_array((string) $order->status, ['COMPLETED', 'PAID', 'CANCELLED', 'REFUNDED'], true)) {
+            return;
+        }
+
+        Payment::updateOrCreate(
+            ['order_id' => $order->order_id],
+            [
+                'payment_method' => $order->payment_method,
+                'provider' => $this->paymentProviderFor((string) $order->payment_method),
+                'amount' => $amount,
+                'status' => 'PENDING',
+                'paid_at' => null,
+                'note' => 'Cho thanh toan booking #'.$order->booking_id.'.',
+            ]
+        );
+    }
+
+    private function ensureSuccessfulPaymentForOrder(Order $order, string $paymentMethod, string $note): void
+    {
+        $amount = (float) $order->grand_total;
+
+        if ($amount <= 0) {
+            return;
+        }
+
+        Payment::updateOrCreate(
+            ['order_id' => $order->order_id],
+            [
+                'payment_method' => $paymentMethod,
+                'provider' => $this->paymentProviderFor($paymentMethod),
+                'amount' => $amount,
+                'status' => 'SUCCESS',
+                'paid_at' => now(),
+                'note' => $note,
+            ]
+        );
+    }
+
+    private function syncBookingRoomStatus(Booking $booking, string $status): void
+    {
+        $booking->bookingRooms()
+            ->with('room')
+            ->get()
+            ->each(function (BookingRoom $bookingRoom) use ($status): void {
+                $room = $bookingRoom->room;
+
+                if (! $room || $room->status === 'MAINTENANCE') {
+                    return;
+                }
+
+                $room->update(['status' => $status]);
+            });
+    }
+
+    private function releaseRoomsForCancelledBooking(Booking $booking): void
+    {
+        $booking->bookingRooms()
+            ->with('room')
+            ->get()
+            ->each(function (BookingRoom $bookingRoom) use ($booking): void {
+                $room = $bookingRoom->room;
+
+                if (! $room || $room->status === 'MAINTENANCE') {
+                    return;
+                }
+
+                $lockedRoom = $room->newQuery()
+                    ->where('room_id', $room->room_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $lockedRoom || $this->roomHasAnotherActiveOverlap($booking, $bookingRoom)) {
+                    return;
+                }
+
+                $lockedRoom->update(['status' => 'AVAILABLE']);
+            });
+    }
+
+    private function roomHasAnotherActiveOverlap(Booking $booking, BookingRoom $bookingRoom): bool
+    {
+        return BookingRoom::query()
+            ->where('room_id', $bookingRoom->room_id)
+            ->where('booking_id', '<>', $booking->booking_id)
+            ->whereHas('booking', function ($query) use ($booking): void {
+                $query->whereIn('status', ['PENDING', 'CONFIRMED', 'CHECKED_IN'])
+                    ->where('checkin_expected_at', '<', $booking->checkout_expected_at)
+                    ->where('checkout_expected_at', '>', $booking->checkin_expected_at);
+            })
+            ->exists();
+    }
+
+    private function paymentProviderFor(string $paymentMethod): string
+    {
+        return match (strtoupper($paymentMethod)) {
+            'BANK_TRANSFER' => 'Ngan hang',
+            'MOMO' => 'Momo',
+            default => 'Quay thu ngan',
+        };
+    }
+
     private function paymentMethodLabel(string $paymentMethod): string
     {
         return match (strtoupper($paymentMethod)) {
@@ -610,6 +765,7 @@ class PaymentRepository implements PaymentRepositoryInterface
             'customer.user',
             'branch',
             'coupon',
+            'payment',
             'booking.bookingRooms.room.typeRoom',
             'details.bookingRoom.room.typeRoom',
             'details.bookingServicePet.service',

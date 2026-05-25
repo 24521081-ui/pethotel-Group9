@@ -11,6 +11,13 @@ class Pet extends Model
 
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return [
+            'weight_kg' => 'float',
+        ];
+    }
+
     public function customer()
     {
         return $this->belongsTo(Customer::class, 'customer_id', 'customer_id');

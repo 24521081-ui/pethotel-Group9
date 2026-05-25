@@ -43,6 +43,7 @@ require __DIR__ . '/authentication/index.php';
 Route::controller(RoomController::class)->prefix('rooms')->name('rooms.')->group(function () {
     Route::get('/dog', 'dog')->name('dog');
     Route::get('/cat', 'cat')->name('cat');
+    Route::get('/{type}/{species}', 'showByTypeAndSpecies')->name('by-type-species');
     Route::get('/{roomId}', 'show')->name('show');
 });
 

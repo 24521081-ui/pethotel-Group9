@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -76,7 +75,7 @@ class AccountController extends WebController
                 ->withErrors(['current_password' => 'Mật khẩu hiện tại không chính xác.']);
         }
 
-        DB::transaction(function () use ($user, $person, $validated): void {
+        DB::transaction(function () use ($user, $person, $validated, $request): void {
             $user->forceFill([
                 'name' => $validated['full_name'],
                 'email' => strtolower(trim($validated['email'])),
@@ -95,18 +94,15 @@ class AccountController extends WebController
             $personUpdates = [
                 'full_name' => $validated['full_name'],
                 'phone' => $validated['phone'],
+                'birthday' => $validated['birthday'] ?? null,
             ];
 
-            if (Schema::hasColumn($person->getTable(), 'address')) {
+            if ($person->getTable() === 'customer') {
                 $personUpdates['address'] = $validated['address'] ?? null;
             }
 
-            if (Schema::hasColumn($person->getTable(), 'birthday')) {
-                $personUpdates['birthday'] = $validated['birthday'] ?? null;
-            }
-
-            if (Schema::hasColumn($person->getTable(), 'date_of_birth')) {
-                $personUpdates['date_of_birth'] = $validated['birthday'] ?? null;
+            if ($request->hasFile('avatar')) {
+                $personUpdates['avatar'] = $request->file('avatar')->store('avatars', 'public');
             }
 
             $person->forceFill($personUpdates)->save();
@@ -123,11 +119,12 @@ class AccountController extends WebController
 
         $person = $user->customer ?? $user->employee;
         $fullName = $this->stringOrDefault($person?->full_name, $this->stringOrDefault($user->name, 'Khách hàng Pet Hotel'));
-        $birthday = $person?->birthday ?? $person?->date_of_birth ?? '';
+        $birthday = $person?->birthday ?? '';
+        $avatar = $person?->avatar ?? null;
 
         return [
             'avatar_text' => $this->initials($fullName),
-            'avatar_url' => '',
+            'avatar_url' => $avatar ? asset('storage/'.$avatar) : '',
             'full_name' => $fullName,
             'email' => $this->stringOrDefault($user->email),
             'phone' => $this->stringOrDefault($person?->phone),

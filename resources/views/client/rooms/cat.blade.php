@@ -153,7 +153,7 @@
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 1) }}" class="cat-room-btn">
+        <a href="{{ route('rooms.by-type-species', ['type' => 'normal', 'species' => 'cat']) }}" class="cat-room-btn">
           Xem chi tiết
         </a>
       </div>
@@ -161,13 +161,13 @@
 
     <div class="cat-room-card reverse">
       <div class="cat-room-image">
-        <img src="{{ $catVipRoomImage }}" alt="Phòng VIP cho mèo">
+        <img src="{{ $catVipRoomImage }}" alt="Phòng Cao cấp cho mèo">
       </div>
 
       <div class="cat-room-content">
         <div class="cat-room-header">
           <div>
-            <h3>Phòng VIP</h3>
+            <h3>Phòng Cao cấp</h3>
             <p>Diện tích: 4m²</p>
           </div>
 
@@ -185,7 +185,7 @@
           </ul>
 
           <ul>
-            <li><i class="fa-solid fa-check"></i> Camera theo dõi</li>
+            <li><i class="fa-solid fa-check"></i> Theo dõi bằng hình ảnh</li>
             <li><i class="fa-solid fa-check"></i> Chải lông nhẹ nhàng</li>
           </ul>
         </div>
@@ -193,7 +193,7 @@
         <div class="cat-room-description">
           <h4>Mô tả chi tiết</h4>
           <p>
-            Phòng VIP dành cho các bé mèo cần không gian thoải mái hơn, có khu vực leo trèo,
+            Phòng Cao cấp dành cho các bé mèo cần không gian thoải mái hơn, có khu vực leo trèo,
             trụ cào móng và đồ chơi riêng. Nhân viên sẽ ghi chú thói quen sinh hoạt,
             khẩu phần ăn và mức độ tương tác phù hợp với từng bé.
           </p>
@@ -208,7 +208,7 @@
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 2) }}" class="cat-room-btn">
+        <a href="{{ route('rooms.by-type-species', ['type' => 'vip', 'species' => 'cat']) }}" class="cat-room-btn">
           Xem chi tiết
         </a>
       </div>
@@ -216,13 +216,13 @@
 
     <div class="cat-room-card">
       <div class="cat-room-image">
-        <img src="{{ $catLuxuryRoomImage }}" alt="Phòng Luxury cho mèo">
+        <img src="{{ $catLuxuryRoomImage }}" alt="Phòng Sang trọng cho mèo">
       </div>
 
       <div class="cat-room-content">
         <div class="cat-room-header">
           <div>
-            <h3>Phòng Luxury</h3>
+            <h3>Phòng Sang trọng</h3>
             <p>Diện tích: 6m²</p>
           </div>
 
@@ -234,7 +234,7 @@
 
         <div class="cat-feature-grid">
           <ul>
-            <li><i class="fa-solid fa-check"></i> Suite riêng biệt</li>
+            <li><i class="fa-solid fa-check"></i> Không gian riêng biệt</li>
             <li><i class="fa-solid fa-check"></i> Khu leo trèo riêng</li>
             <li><i class="fa-solid fa-check"></i> Thực đơn cao cấp</li>
           </ul>
@@ -248,7 +248,7 @@
         <div class="cat-room-description">
           <h4>Mô tả chi tiết</h4>
           <p>
-            Phòng Luxury là lựa chọn cao cấp nhất cho các bé mèo cần sự riêng tư và chăm sóc
+            Phòng Sang trọng là lựa chọn cao cấp nhất cho các bé mèo cần sự riêng tư và chăm sóc
             cá nhân hóa. Không gian rộng, có khu leo trèo riêng, đồ chơi, khay cát riêng
             và chế độ chăm sóc phù hợp theo tính cách từng bé.
           </p>
@@ -257,13 +257,13 @@
         <div class="cat-health-note">
           <h4>Y tế & chăm sóc</h4>
           <p>
-            Với gói Luxury, mèo được theo dõi kỹ về ăn uống, vệ sinh, mức độ vận động
+            Với gói sang trọng, mèo được theo dõi kỹ về ăn uống, vệ sinh, mức độ vận động
             và biểu hiện tinh thần. Nếu phát hiện dấu hiệu bất thường, nhân viên sẽ ghi nhận,
             thông báo cho chủ nuôi và hỗ trợ liên hệ thú y khi cần.
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 3) }}" class="cat-room-btn">
+        <a href="{{ route('rooms.by-type-species', ['type' => 'luxury', 'species' => 'cat']) }}" class="cat-room-btn">
           Xem chi tiết
         </a>
       </div>
@@ -278,7 +278,7 @@
     <div class="cat-process-grid">
       <div class="cat-step">
         <span>1</span>
-        <h3>Đón tiếp & Check-in</h3>
+        <h3>Đón tiếp & nhận phòng</h3>
         <p>Kiểm tra sức khỏe ban đầu</p>
       </div>
 

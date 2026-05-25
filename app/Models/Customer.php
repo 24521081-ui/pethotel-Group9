@@ -11,6 +11,13 @@ class Customer extends Model
 
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return [
+            'birthday' => 'date',
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'id');

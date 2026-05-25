@@ -135,7 +135,7 @@
 
           <ul>
             <li><i class="fa-solid fa-check"></i> Giường êm ái</li>
-            <li><i class="fa-solid fa-check"></i> Camera 24/7</li>
+            <li><i class="fa-solid fa-check"></i> Theo dõi 24/7</li>
           </ul>
         </div>
 
@@ -157,20 +157,20 @@
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 1) }}" class="dog-room-btn">Xem chi tiết</a>
+        <a href="{{ route('rooms.by-type-species', ['type' => 'normal', 'species' => 'dog']) }}" class="dog-room-btn">Xem chi tiết</a>
       </div>
     </div>
 
     {{-- Room 2 --}}
     <div class="dog-room-card reverse">
       <div class="dog-room-image">
-        <img src="{{ $dogVipRoomImage }}" alt="Phòng VIP">
+        <img src="{{ $dogVipRoomImage }}" alt="Phòng Cao cấp">
       </div>
 
       <div class="dog-room-content">
         <div class="dog-room-header">
           <div>
-            <h3>Phòng VIP</h3>
+            <h3>Phòng Cao cấp</h3>
             <p class="room-area">Diện tích: 5m²</p>
           </div>
 
@@ -196,7 +196,7 @@
         <div class="room-description">
           <h4>Mô tả chi tiết</h4>
           <p>
-            Phòng VIP dành cho các bé chó cần không gian rộng hơn và chế độ chăm sóc
+            Phòng Cao cấp dành cho các bé chó cần không gian rộng hơn và chế độ chăm sóc
             kỹ hơn. Bé được vui chơi trong khu vực riêng, có đồ chơi cao cấp,
             chế độ ăn linh hoạt và lịch sinh hoạt được ghi chú theo thói quen của chủ nuôi.
           </p>
@@ -211,20 +211,20 @@
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 2) }}" class="dog-room-btn">Xem chi tiết</a>
+        <a href="{{ route('rooms.by-type-species', ['type' => 'vip', 'species' => 'dog']) }}" class="dog-room-btn">Xem chi tiết</a>
       </div>
     </div>
 
     {{-- Room 3 --}}
     <div class="dog-room-card">
       <div class="dog-room-image">
-        <img src="{{ $dogLuxuryRoomImage }}" alt="Phòng Luxury">
+        <img src="{{ $dogLuxuryRoomImage }}" alt="Phòng Sang trọng">
       </div>
 
       <div class="dog-room-content">
         <div class="dog-room-header">
           <div>
-            <h3>Phòng Luxury</h3>
+            <h3>Phòng Sang trọng</h3>
             <p class="room-area">Diện tích: 8m²</p>
           </div>
 
@@ -236,13 +236,13 @@
 
         <div class="room-feature-grid">
           <ul>
-            <li><i class="fa-solid fa-check"></i> Suite riêng biệt</li>
-            <li><i class="fa-solid fa-check"></i> Thực đơn VIP</li>
+            <li><i class="fa-solid fa-check"></i> Không gian riêng biệt</li>
+            <li><i class="fa-solid fa-check"></i> Thực đơn cao cấp</li>
             <li><i class="fa-solid fa-check"></i> Vườn chơi riêng</li>
           </ul>
 
           <ul>
-            <li><i class="fa-solid fa-check"></i> Spa hằng ngày</li>
+            <li><i class="fa-solid fa-check"></i> Chăm sóc thư giãn hằng ngày</li>
             <li><i class="fa-solid fa-check"></i> Chăm sóc 1-1</li>
           </ul>
         </div>
@@ -250,22 +250,22 @@
         <div class="room-description">
           <h4>Mô tả chi tiết</h4>
           <p>
-            Phòng Luxury là lựa chọn cao cấp nhất, phù hợp với các bé cần sự riêng tư,
+            Phòng Sang trọng là lựa chọn cao cấp nhất, phù hợp với các bé cần sự riêng tư,
             không gian lớn và chăm sóc cá nhân hóa. Bé có khu vui chơi riêng,
-            thực đơn đặc biệt, dịch vụ spa hằng ngày và nhân viên theo dõi sát sao.
+            thực đơn đặc biệt, dịch vụ chăm sóc thư giãn hằng ngày và nhân viên theo dõi sát sao.
           </p>
         </div>
 
         <div class="room-health-note">
           <h4>Y tế & chăm sóc</h4>
           <p>
-            Với gói Luxury, thú cưng được theo dõi sức khỏe theo từng ca chăm sóc.
+            Với gói sang trọng, thú cưng được theo dõi sức khỏe theo từng ca chăm sóc.
             Các thay đổi về ăn uống, vận động hoặc dấu hiệu bất thường sẽ được ghi nhận
             và báo lại cho chủ nuôi khi cần thiết.
           </p>
         </div>
 
-        <a href="{{ route('type-room.show', 3) }}" class="dog-room-btn">Xem chi tiết</a>
+        <a href="{{ route('rooms.by-type-species', ['type' => 'luxury', 'species' => 'dog']) }}" class="dog-room-btn">Xem chi tiết</a>
       </div>
     </div>
   </div>
@@ -279,7 +279,7 @@
     <div class="daily-process-grid">
       <div class="daily-step">
         <span>1</span>
-        <h3>Đón tiếp & Check-in</h3>
+        <h3>Đón tiếp & nhận phòng</h3>
         <p>Khám sức khỏe ban đầu</p>
       </div>
 

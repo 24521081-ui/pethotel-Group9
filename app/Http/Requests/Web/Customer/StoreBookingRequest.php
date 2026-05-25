@@ -16,7 +16,7 @@ class StoreBookingRequest extends FormRequest
         return [
             'branch_id' => ['required', 'integer', 'exists:branch,branch_id'],
             'room_type' => ['required', 'integer', 'exists:type_room,type_room_id'],
-            'checkin_expected_at' => ['required', 'date'],
+            'checkin_expected_at' => ['required', 'date', 'after_or_equal:today'],
             'checkout_expected_at' => ['required', 'date', 'after:checkin_expected_at'],
             'pet_ids' => ['required', 'array', 'min:1'],
             'pet_ids.*' => ['required', 'integer', 'distinct', 'exists:pet,pet_id'],
@@ -37,6 +37,7 @@ class StoreBookingRequest extends FormRequest
             'room_type.required' => 'Vui lòng chọn loại phòng trước khi xem lịch trống.',
             'room_type.exists' => 'Loại phòng không hợp lệ.',
             'checkin_expected_at.required' => 'Vui lòng chọn ngày nhận phòng.',
+            'checkin_expected_at.after_or_equal' => 'Ngày nhận phòng không được là ngày trong quá khứ.',
             'checkout_expected_at.required' => 'Vui lòng chọn ngày trả phòng.',
             'checkout_expected_at.after' => 'Ngày trả phòng phải sau ngày nhận phòng.',
             'pet_ids.required' => 'Vui lòng chọn thú cưng trước khi thanh toán.',

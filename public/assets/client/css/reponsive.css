@@ -27,13 +27,13 @@
         padding-right: 32px;
     }
 
-    .booking-wrapper,
     .payment-layout {
         grid-template-columns: 1fr;
     }
 
-    .booking-summary,
     .payment-right {
+        max-height: none;
+        overflow: visible;
         position: static;
     }
 }

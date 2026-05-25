@@ -1,5 +1,5 @@
-<aside class="booking-summary">
-    <div class="summary-card">
+<aside class="booking-summary booking-summary-wrapper">
+    <div class="summary-card booking-summary-sticky">
         <h3>Tóm tắt đặt phòng</h3>
 
         <div class="summary-group">

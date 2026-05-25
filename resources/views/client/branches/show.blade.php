@@ -3,7 +3,6 @@
 @section('title', 'Chi tiết chi nhánh')
 
 @push('styles')
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ asset('assets/client/css/branch-show.css') }}">
 @endpush
 
@@ -82,26 +81,35 @@
         </div>
 
         <div class="bh-rooms anim anim-d2">
-            <button type="button" class="bh-room-card active" aria-pressed="true">
-                <div class="room-img-wrap gray"><i class="fa-solid fa-house"></i></div>
-                <div class="room-tier">Tiêu chuẩn</div>
-                <div class="room-price">150.000đ / đêm</div>
-                <span class="room-badge">Phổ biến</span>
-            </button>
+            @foreach ($roomTypes as $roomType)
+            <article class="bh-room-card {{ $loop->first ? 'active' : '' }}">
+                <div class="room-img-wrap {{ $roomType['tone'] }}">
+                    <i class="fa-solid {{ $roomType['icon'] }}"></i>
+                </div>
 
-            <button type="button" class="bh-room-card" aria-pressed="false">
-                <div class="room-img-wrap yellow"><i class="fa-solid fa-star"></i></div>
-                <div class="room-tier">VIP</div>
-                <div class="room-price">300.000đ / đêm</div>
-                <span class="room-badge">Bán chạy</span>
-            </button>
+                <div class="room-copy">
+                    <div class="room-tier">{{ $roomType['name'] }}</div>
+                    <p class="room-desc">{{ $roomType['description'] }}</p>
 
-            <button type="button" class="bh-room-card" aria-pressed="false">
-                <div class="room-img-wrap purple"><i class="fa-solid fa-crown"></i></div>
-                <div class="room-tier">Luxury</div>
-                <div class="room-price">500.000đ / đêm</div>
-                <span class="room-badge">Cao cấp</span>
-            </button>
+                    <div class="room-meta">
+                        <span><i class="fa-solid fa-paw"></i> {{ $roomType['capacity'] }}</span>
+                        <span><i class="fa-solid fa-weight-hanging"></i> {{ $roomType['weight'] }}</span>
+                    </div>
+                </div>
+
+                <div class="room-price-center">
+                    <span>Giá phòng</span>
+                    <strong>{{ $roomType['price'] }}</strong>
+                </div>
+
+                <span class="room-badge">{{ $roomType['badge'] }}</span>
+
+                <div class="room-actions">
+                    <a href="{{ $bookingUrl }}" class="btn-book-room">Đặt phòng</a>
+                    <a href="{{ $roomType['detailUrl'] }}" class="btn-view-detail">Xem chi tiết</a>
+                </div>
+            </article>
+            @endforeach
         </div>
 
         <div class="bh-divider"></div>

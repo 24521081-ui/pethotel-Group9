@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Web\Customer;
 
 use App\Http\Controllers\Web\WebController;
 use App\Http\Requests\Web\Customer\StoreBookingRequest;
+use App\Models\Branch;
 use App\Repositories\Contracts\BookingRepositoryInterface;
 use Exception;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 /**
  * Class BookingController
@@ -72,6 +76,46 @@ class BookingController extends WebController
         return $this->bookingFormView($branchId);
     }
 
+    public function roomTypeAvailability(Request $request, string $branchId): JsonResponse
+    {
+        Branch::where('branch_id', $branchId)
+            ->where('is_active', 1)
+            ->firstOrFail();
+
+        $validator = Validator::make($request->all(), [
+            'check_in' => ['nullable', 'date'],
+            'check_out' => ['nullable', 'date', 'after:check_in'],
+        ], [
+            'check_in.date' => 'Ngày nhận phòng không hợp lệ.',
+            'check_out.date' => 'Ngày trả phòng không hợp lệ.',
+            'check_out.after' => 'Ngày trả phòng phải sau ngày nhận phòng.',
+        ]);
+
+        $validator->after(function ($validator) use ($request): void {
+            if ($request->filled('check_in') !== $request->filled('check_out')) {
+                $validator->errors()->add('check_in', 'Vui lòng nhập đủ ngày nhận và ngày trả phòng.');
+            }
+        });
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'branch_id' => (int) $branchId,
+            'data' => $this->bookings->getRoomTypeAvailability(
+                $branchId,
+                $request->input('check_in'),
+                $request->input('check_out')
+            ),
+        ]);
+    }
+
     /**
      * Giao diện xem chi tiết một đơn đặt phòng cụ thể.
      */
@@ -128,7 +172,7 @@ class BookingController extends WebController
             // Điều hướng sang cổng thanh toán
             return redirect()
                 ->route('payment.show', $booking->booking_id)
-                ->with('status', 'Đã tìm thấy phòng và giữ chỗ cho bạn. Vui lòng thanh toán.');
+                ->with('status');   
         } catch (Exception $e) {
             // Bắt lỗi từ logic nghiệp vụ (hết phòng, sai số lượng,...) và trả về form
             return $this->bookingErrorResponse($e);

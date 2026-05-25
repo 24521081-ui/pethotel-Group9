@@ -111,6 +111,12 @@ interface BookingRepositoryInterface
      */
     public function bookingBranches(): array;
 
+    public function getRoomTypeAvailability(
+        string|int $branchId,
+        ?string $checkIn = null,
+        ?string $checkOut = null
+    ): array;
+
     /**
      * Lấy danh sách lịch sử đặt phòng của một khách hàng cụ thể.
      *

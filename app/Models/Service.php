@@ -21,6 +21,12 @@ class Service extends Model
         return $this->hasMany(ServiceProductDetail::class, 'service_id', 'service_id');
     }
 
+    public function products()
+    {
+        return $this->belongsToMany(Product::class, 'service_product_detail', 'service_id', 'product_id', 'service_id', 'product_id')
+            ->withPivot(['service_product_detail_id', 'amount', 'notes']);
+    }
+
     public function bookingServicePets()
     {
         return $this->hasMany(BookingServicePet::class, 'service_id', 'service_id');

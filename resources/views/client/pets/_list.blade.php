@@ -29,7 +29,7 @@ $speciesIcons = [
         filled($pet->weight_kg) ? rtrim(rtrim(number_format((float) $pet->weight_kg, 2, ',', '.'), '0'), ',').' kg' : null,
         filled($pet->age) ? $pet->age.' tuổi' : null,
       ])->filter()->implode(' · ');
-      $careNote = $pet->special_notes ?? $pet->special_note ?? null;
+      $careNote = $pet->special_notes ?? null;
     @endphp
 
     <div class="pet-card">

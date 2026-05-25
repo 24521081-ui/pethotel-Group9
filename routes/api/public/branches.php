@@ -8,5 +8,6 @@ Route::prefix('branches')
     ->controller(BranchController::class)
     ->group(function () {
         Route::get('/', 'index')->name('index');
+        Route::get('/filter', 'filter')->name('filter');
         Route::get('/{branchId}', 'show')->name('show');
     });

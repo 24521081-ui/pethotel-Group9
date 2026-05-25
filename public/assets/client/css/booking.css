@@ -103,14 +103,14 @@
    Booking Layout
 ========================= */
 body:has(.booking-page-v2) {
-    overflow-x: hidden;
+    overflow-x: clip;
 }
 
 .booking-page-v2 {
     background: #f7f8fa;
     min-height: calc(100vh - 64px);
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
     padding: 28px 0 76px;
     width: 100%;
 }
@@ -229,6 +229,25 @@ body:has(.booking-page-v2) {
     font-weight: 500;
 }
 
+.room-card-header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin: 0 0 20px;
+}
+
+.room-card-header h3 {
+    margin: 0;
+}
+
+.room-condition-message {
+    color: #dc2626;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
 .booking-step-panel {
     animation: bookingFadeIn 0.18s ease both;
 }
@@ -333,40 +352,6 @@ body:has(.booking-page-v2) {
     box-shadow:
         0 0 0 3px rgba(246, 162, 26, 0.16),
         0 14px 28px rgba(15, 23, 42, 0.06);
-}
-
-.booking-room-card-v2.room-sold-out,
-.booking-room-card-v2:disabled {
-    background: #f8fafc;
-    border-color: #e2e8f0;
-    box-shadow: none;
-    color: #64748b;
-    cursor: not-allowed;
-    opacity: 0.82;
-}
-
-.booking-room-card-v2.room-sold-out:hover,
-.booking-room-card-v2.room-sold-out:focus-visible,
-.booking-room-card-v2:disabled:hover,
-.booking-room-card-v2:disabled:focus-visible {
-    background: #f8fafc;
-    border-color: #e2e8f0;
-    box-shadow: none;
-}
-
-.sold-out-badge {
-    align-items: center;
-    background: #fee2e2;
-    border-radius: 0 0 0 12px;
-    color: #b91c1c;
-    display: inline-flex;
-    font-size: 12px;
-    font-weight: 800;
-    min-height: 30px;
-    padding: 0 10px;
-    position: absolute;
-    right: 0;
-    top: 0;
 }
 
 .room-selected-badge {
@@ -528,6 +513,33 @@ body:has(.booking-page-v2) {
 
 .booking-date-prerequisite.is-hidden {
     display: none;
+}
+
+.booking-availability-status {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 16px 0 0;
+    padding: 10px 14px;
+}
+
+.booking-availability-status.is-loading {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #9a3412;
+}
+
+.booking-availability-status.is-error {
+    background: #fff1f2;
+    border-color: #fecdd3;
+    color: #be123c;
+}
+
+.booking-room-card-v2.is-updating-availability .room-availability-count {
+    opacity: 0.62;
 }
 
 /* =========================
@@ -958,13 +970,24 @@ body:has(.booking-page-v2) {
 /* =========================
    Summary
 ========================= */
-.booking-summary {
+.booking-summary-wrapper {
     align-self: start;
     min-width: 0;
-    position: sticky;
-    top: 92px;
     width: 100%;
-    z-index: 1;
+}
+
+.booking-summary-sticky {
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    z-index: 10;
+}
+
+@media (min-width: 992px) {
+    .booking-summary-sticky {
+        align-self: flex-start;
+        position: sticky;
+        top: 92px;
+    }
 }
 
 .summary-card {
@@ -1274,12 +1297,15 @@ body.booking-modal-open {
 /* =========================
    Responsive
 ========================= */
-@media (max-width: 1120px) {
+@media (max-width: 991px) {
     .booking-wrapper {
         grid-template-columns: 1fr;
     }
 
-    .booking-summary {
+    .booking-summary-wrapper,
+    .booking-summary-sticky {
+        max-height: none;
+        overflow: visible;
         position: static;
         top: auto;
     }

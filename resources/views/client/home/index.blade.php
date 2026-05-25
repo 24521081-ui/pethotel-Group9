@@ -173,7 +173,7 @@
            <h3>Phòng Thường</h3>
            <p>Sinh hoạt chung, tiêu chuẩn cơ bản, phù hợp cho lưu trú ngắn hạn</p>
 
-           <a href="{{ url('/rooms/normal') }}" class="room-btn">
+           <a href="{{ route('type-room.show', 1) }}" class="room-btn">
              Xem chi tiết
            </a>
          </div>
@@ -186,7 +186,7 @@
            <h3>Phòng VIP</h3>
            <p>Có camera riêng, đồ chơi cao cấp, không gian riêng tư</p>
 
-           <a href="{{ url('/rooms/vip') }}" class="room-btn">
+           <a href="{{ route('type-room.show', 2) }}" class="room-btn">
              Xem chi tiết
            </a>
          </div>
@@ -199,7 +199,7 @@
            <h3>Phòng Luxury</h3>
            <p>Không gian rộng rãi, bãi cỏ riêng, dịch vụ cao cấp</p>
 
-           <a href="{{ url('/rooms/luxury') }}" class="room-btn">
+           <a href="{{ route('type-room.show', 3) }}" class="room-btn">
              Xem chi tiết
            </a>
          </div>

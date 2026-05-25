@@ -57,7 +57,7 @@ class LaravelSystemSeeder extends Seeder
         DB::table('job_batches')->insert([
             [
                 'id' => 'demo-batch-id',
-                'name' => 'Demo Batch',
+                'name' => 'Lô Demo',
                 'total_jobs' => 1,
                 'pending_jobs' => 1,
                 'failed_jobs' => 0,
@@ -76,7 +76,7 @@ class LaravelSystemSeeder extends Seeder
                 'connection' => 'database',
                 'queue' => 'default',
                 'payload' => json_encode(['demo' => true], JSON_UNESCAPED_UNICODE),
-                'exception' => 'Demo failed job record for seed data only.',
+                'exception' => 'Bản ghi job thất bại mẫu, chỉ dùng cho dữ liệu seed.',
                 'failed_at' => now(),
             ],
         ]);

@@ -15,23 +15,26 @@
         </div>
       </div>
 
-      {{-- BranchesFilter: bộ lọc quyết định dữ liệu được render bên dưới --}}
       @include('client.branches.partials.branches-filter', [
-      'districts' => $districts,
-      'filters' => $filters,
+        'districts' => $districts,
+        'filters' => $filters,
       ])
 
-      {{-- BranchesDetail: chỉ render các chi nhánh còn lại sau khi lọc --}}
+      <div class="branch-feedback" data-branch-feedback hidden></div>
+
       @include('client.branches.partials.branches-detail', [
-      'branches' => $branches,
+        'branches' => $branches,
       ])
     </div>
 
-    {{-- BranchesMap: marker được render từ cùng danh sách với BranchesDetail --}}
     @include('client.branches.partials.branches-map', [
-    'branches' => $branches,
+      'branches' => $branches,
     ])
   </div>
 </section>
 
 @endsection
+
+@push('scripts')
+  <script src="{{ asset('assets/client/js/branches.js') }}"></script>
+@endpush

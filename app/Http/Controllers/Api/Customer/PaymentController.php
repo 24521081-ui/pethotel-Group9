@@ -42,7 +42,6 @@ class PaymentController extends Controller
             $payment = Payment::updateOrCreate(
                 ['order_id' => $order->order_id],
                 [
-                    'payment_id' => $order->payment?->payment_id ?? $this->nextPaymentId(),
                     'payment_method' => $validated['payment_method'],
                     'provider' => $validated['provider'] ?? null,
                     'amount' => $validated['amount'],
@@ -121,17 +120,5 @@ class PaymentController extends Controller
             ->where('customer_id', $customer->customer_id)
             ->where('booking_id', $bookingId)
             ->firstOrFail();
-    }
-
-    private function nextPaymentId(): string
-    {
-        $lastId = Payment::query()
-            ->where('payment_id', 'like', 'PAY%')
-            ->orderByDesc('payment_id')
-            ->value('payment_id');
-
-        $nextNumber = $lastId ? ((int) substr($lastId, 3)) + 1 : 1;
-
-        return 'PAY'.str_pad((string) $nextNumber, 3, '0', STR_PAD_LEFT);
     }
 }
